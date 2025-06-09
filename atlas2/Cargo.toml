@@ -1,0 +1,46 @@
+[workspace]
+members = [
+    "node",
+    "runtime",
+    "pallets/staking-atlas",
+]
+resolver = "2"
+
+[workspace.package]
+authors = ["Atlas Team"]
+repository = "https://github.com/atlas/atlas2"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# Substrate Dependencies
+frame-support = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
+frame-system = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
+sp-core = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
+sp-runtime = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
+sp-std = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
+sp-io = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
+pallet-aura = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
+pallet-balances = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
+sp-consensus-aura = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
+
+# ZK Dependencies
+arkworks-native-gadgets = { git = "https://github.com/arkworks-rs/r1cs-std", branch = "master", optional = true }
+ark-ff = { version = "0.4.0", default-features = false }
+ark-ec = { version = "0.4.0", default-features = false }
+ark-std = { version = "0.4.0", default-features = false }
+ark-r1cs-std = { version = "0.4.0", default-features = false }
+ark-snark = { version = "0.4.0", default-features = false }
+
+# Other Dependencies
+codec = { package = "parity-scale-codec", version = "3.6.1", default-features = false, features = ["derive"] }
+scale-info = { version = "2.9.0", default-features = false, features = ["derive"] }
+log = { version = "0.4.17", default-features = false }
+serde = { version = "1.0.163", default-features = false, features = ["derive"] }
+
+[profile.release]
+panic = "unwind"
+opt-level = 3
+lto = true
+debug = false 

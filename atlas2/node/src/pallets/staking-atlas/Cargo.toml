@@ -1,0 +1,48 @@
+[package]
+name = "pallet-staking-atlas"
+version = "0.1.0"
+edition = "2021"
+description = "Substrate pallet implementing Aura-R DPoS consensus for Atlas2"
+authors = ["Atlas2 Team"]
+repository = "https://github.com/username/atlas2"
+
+[dependencies]
+# Substrate dependencies
+codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"] }
+scale-info = { version = "2.1.2", default-features = false, features = ["derive"] }
+
+# Substrate frame
+frame-support = { version = "4.0.0", default-features = false }
+frame-system = { version = "4.0.0", default-features = false }
+frame-election-provider-solution-type = { version = "4.0.0", default-features = false }
+pallet-session = { version = "4.0.0", default-features = false }
+pallet-staking = { version = "4.0.0", default-features = false }
+
+# Primitives
+sp-runtime = { version = "4.0.0", default-features = false }
+sp-staking = { version = "4.0.0", default-features = false }
+sp-core = { version = "4.0.0", default-features = false }
+sp-std = { version = "4.0.0", default-features = false }
+sp-io = { version = "4.0.0", default-features = false }
+
+[dev-dependencies]
+sp-core = { version = "4.0.0", default-features = false }
+sp-io = { version = "4.0.0", default-features = false }
+sp-runtime = { version = "4.0.0", default-features = false }
+
+[features]
+default = ["std"]
+std = [
+    "codec/std",
+    "scale-info/std",
+    "frame-support/std",
+    "frame-system/std",
+    "frame-election-provider-solution-type/std",
+    "pallet-session/std",
+    "pallet-staking/std",
+    "sp-runtime/std",
+    "sp-staking/std",
+    "sp-core/std",
+    "sp-std/std",
+    "sp-io/std",
+]

@@ -1,0 +1,70 @@
+[package]
+name = "atlas2-node"
+version = "0.1.0"
+edition = "2021"
+description = "Advanced privacy-focused blockchain with dual-ledger system"
+authors = ["Atlas2 Team"]
+repository = "https://github.com/username/atlas2"
+
+[dependencies]
+# Substrate frame dependencies
+substrate-frame-std = { version = "4.0.0", default-features = false }
+pallet-aura = { version = "4.0.0", default-features = false }
+pallet-grandpa = { version = "4.0.0", default-features = false }
+pallet-session = { version = "4.0.0", default-features = false }
+pallet-babe = { version = "4.0.0", default-features = false }
+pallet-balances = { version = "4.0.0", default-features = false }
+
+# Custom pallets
+pallet-staking-atlas = { path = "src/pallets/staking-atlas", default-features = false, version = "0.1.0" }
+pallet-shielded-pool = { path = "src/pallets/shielded-pool", default-features = false, version = "0.1.0" }
+
+# Core substrate dependencies
+sc-service = { version = "0.10.0", default-features = false }
+sc-executor = { version = "0.10.0", default-features = false }
+sc-consensus = { version = "0.10.0", default-features = false }
+sc-consensus-aura = { version = "0.10.0", default-features = false }
+sc-finality-grandpa = { version = "0.10.0", default-features = false }
+sc-client-api = { version = "4.0.0", default-features = false }
+sp-core = { version = "4.0.0", default-features = false }
+sp-runtime = { version = "4.0.0", default-features = false }
+sp-consensus = { version = "0.10.0", default-features = false }
+sp-consensus-aura = { version = "0.10.0", default-features = false }
+sp-finality-grandpa = { version = "4.0.0", default-features = false }
+
+# Other dependencies
+log = "0.4.17"
+clap = { version = "3.2", features = ["derive"] }
+futures = "0.3.25"
+tokio = { version = "1.25", features = ["full"] }
+
+[build-dependencies]
+substrate-build-script-utils = { version = "3.0.0" }
+
+[features]
+default = ["std"]
+std = [
+    "substrate-frame-std/std",
+    "pallet-aura/std",
+    "pallet-grandpa/std",
+    "pallet-session/std",
+    "pallet-babe/std",
+    "pallet-balances/std",
+    "pallet-staking-atlas/std",
+    "pallet-shielded-pool/std",
+    "sc-service/std",
+    "sc-executor/std",
+    "sc-consensus/std",
+    "sc-consensus-aura/std",
+    "sc-finality-grandpa/std",
+    "sc-client-api/std",
+    "sp-core/std",
+    "sp-runtime/std",
+    "sp-consensus/std",
+    "sp-consensus-aura/std",
+    "sp-finality-grandpa/std",
+]
+
+[[bin]]
+name = "atlas2-node"
+path = "src/main.rs"

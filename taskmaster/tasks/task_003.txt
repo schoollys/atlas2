@@ -1,0 +1,353 @@
+# Task ID: 3
+# Title: Design and Implement ZK-circuits for Private Transfer and Unshield Operations
+# Status: pending
+# Dependencies: 2, 1
+# Priority: medium
+# Description: Design and implement zero-knowledge circuits using arkworks-rs for private_transfer and unshield operations, enabling privacy-preserving transactions between shielded accounts and from shielded to public accounts.
+# Details:
+This task involves designing and implementing zero-knowledge circuits for private transfers and unshielding operations using the arkworks-rs library:
+
+1. Set up the development environment:
+   ```bash
+   cargo add arkworks-rs --features="r1cs, groth16"
+   cargo add ark-bn254 # For the BN254 curve commonly used in ZK applications
+   cargo add ark-ff ark-ec ark-poly ark-poly-commit
+   ```
+
+2. Define the circuit structure for private_transfer:
+   ```rust
+   use ark_ff::Field;
+   use ark_relations::{
+       lc, ns,
+       r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError},
+   };
+   use ark_bn254::{Bn254, Fr};
+   
+   pub struct PrivateTransferCircuit<F: Field> {
+       // Private inputs
+       sender_note: Option<Note>,
+       receiver_note: Option<Note>,
+       sender_nullifier: Option<F>,
+       
+       // Public inputs
+       nullifier_hash: Option<F>,
+       commitment: Option<F>,
+   }
+   
+   impl<F: Field> ConstraintSynthesizer<F> for PrivateTransferCircuit<F> {
+       fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
+           // Implement constraints for:
+           // 1. Verify sender note ownership (nullifier correctness)
+           // 2. Ensure value conservation (input amount = output amount)
+           // 3. Ensure correct computation of new commitment
+           // 4. Ensure correct computation of nullifier hash
+           
+           // Detailed constraint implementation...
+           
+           Ok(())
+       }
+   }
+   ```
+
+3. Define the circuit structure for unshield:
+   ```rust
+   pub struct UnshieldCircuit<F: Field> {
+       // Private inputs
+       note: Option<Note>,
+       nullifier: Option<F>,
+       recipient_public_key: Option<PublicKey>,
+       
+       // Public inputs
+       nullifier_hash: Option<F>,
+       recipient_address: Option<Address>,
+       amount: Option<u64>,
+   }
+   
+   impl<F: Field> ConstraintSynthesizer<F> for UnshieldCircuit<F> {
+       fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
+           // Implement constraints for:
+           // 1. Verify note ownership
+           // 2. Ensure correct computation of nullifier hash
+           // 3. Ensure recipient address is derived from public key
+           // 4. Ensure amount is correctly extracted from note
+           
+           // Detailed constraint implementation...
+           
+           Ok(())
+       }
+   }
+   ```
+
+4. Implement the Note structure and related cryptographic operations:
+   ```rust
+   pub struct Note {
+       value: u64,
+       owner_public_key: PublicKey,
+       randomness: Fr,
+   }
+   
+   impl Note {
+       pub fn compute_commitment(&self) -> Fr {
+           // Implement Pedersen commitment or similar
+       }
+       
+       pub fn compute_nullifier(&self, private_key: &PrivateKey) -> Fr {
+           // Implement nullifier computation
+       }
+   }
+   ```
+
+5. Implement the setup and proof generation functions:
+   ```rust
+   pub fn setup_private_transfer() -> (ProvingKey<Bn254>, VerifyingKey<Bn254>) {
+       // Generate proving and verification keys for private_transfer circuit
+   }
+   
+   pub fn setup_unshield() -> (ProvingKey<Bn254>, VerifyingKey<Bn254>) {
+       // Generate proving and verification keys for unshield circuit
+   }
+   
+   pub fn generate_private_transfer_proof(
+       proving_key: &ProvingKey<Bn254>,
+       sender_note: Note,
+       receiver_note: Note,
+       sender_private_key: PrivateKey,
+   ) -> Proof<Bn254> {
+       // Generate ZK proof for private transfer
+   }
+   
+   pub fn generate_unshield_proof(
+       proving_key: &ProvingKey<Bn254>,
+       note: Note,
+       private_key: PrivateKey,
+       recipient_address: Address,
+   ) -> Proof<Bn254> {
+       // Generate ZK proof for unshield operation
+   }
+   ```
+
+6. Implement verification functions:
+   ```rust
+   pub fn verify_private_transfer(
+       verifying_key: &VerifyingKey<Bn254>,
+       proof: &Proof<Bn254>,
+       nullifier_hash: Fr,
+       commitment: Fr,
+   ) -> bool {
+       // Verify private transfer proof
+   }
+   
+   pub fn verify_unshield(
+       verifying_key: &VerifyingKey<Bn254>,
+       proof: &Proof<Bn254>,
+       nullifier_hash: Fr,
+       recipient_address: Address,
+       amount: u64,
+   ) -> bool {
+       // Verify unshield proof
+   }
+   ```
+
+7. Integrate with the Substrate runtime to expose these operations as extrinsics:
+   ```rust
+   // In your pallet's implementation
+   #[pallet::call]
+   impl<T: Config> Pallet<T> {
+       #[pallet::weight(10_000)]
+       pub fn private_transfer(
+           origin: OriginFor<T>,
+           proof: Vec<u8>,
+           nullifier_hash: [u8; 32],
+           commitment: [u8; 32],
+       ) -> DispatchResult {
+           // Verify proof and update state
+           // ...
+           Ok(())
+       }
+       
+       #[pallet::weight(10_000)]
+       pub fn unshield(
+           origin: OriginFor<T>,
+           proof: Vec<u8>,
+           nullifier_hash: [u8; 32],
+           recipient: T::AccountId,
+           amount: u64,
+       ) -> DispatchResult {
+           // Verify proof, update state, and transfer funds to public account
+           // ...
+           Ok(())
+       }
+   }
+   ```
+
+8. Ensure proper error handling and edge cases:
+   - Handle invalid proofs
+   - Prevent double-spending by tracking nullifiers
+   - Implement proper serialization/deserialization of circuit parameters
+   - Consider gas costs and optimization for on-chain verification
+
+# Test Strategy:
+To verify the correct implementation of the ZK-circuits for private_transfer and unshield operations:
+
+1. Unit test the circuit constraints:
+   ```rust
+   #[test]
+   fn test_private_transfer_constraints() {
+       // Create a test instance with known inputs and expected outputs
+       let circuit = PrivateTransferCircuit::<Fr> {
+           // Initialize with test values
+       };
+       
+       // Test that the constraints are satisfied with valid inputs
+       let (pk, vk) = setup_private_transfer();
+       let proof = generate_private_transfer_proof(&pk, sender_note, receiver_note, sender_private_key);
+       assert!(verify_private_transfer(&vk, &proof, nullifier_hash, commitment));
+       
+       // Test that the constraints fail with invalid inputs (e.g., incorrect amount)
+       let invalid_circuit = PrivateTransferCircuit::<Fr> {
+           // Initialize with invalid test values
+       };
+       // Verify proof generation fails or verification returns false
+   }
+   
+   #[test]
+   fn test_unshield_constraints() {
+       // Similar tests for unshield circuit
+   }
+   ```
+
+2. Test the cryptographic primitives:
+   ```rust
+   #[test]
+   fn test_note_commitment() {
+       let note = Note {
+           value: 100,
+           owner_public_key: generate_test_public_key(),
+           randomness: Fr::rand(&mut rng),
+       };
+       
+       let commitment = note.compute_commitment();
+       // Verify commitment properties (e.g., with different randomness should produce different commitments)
+   }
+   
+   #[test]
+   fn test_nullifier_generation() {
+       let note = Note { /* ... */ };
+       let private_key = generate_test_private_key();
+       
+       let nullifier = note.compute_nullifier(&private_key);
+       // Verify nullifier properties
+   }
+   ```
+
+3. Integration tests with mock runtime:
+   ```rust
+   #[test]
+   fn test_private_transfer_extrinsic() {
+       new_test_ext().execute_with(|| {
+           // Set up test accounts and initial state
+           
+           // Generate valid proof for private transfer
+           let proof = generate_test_private_transfer_proof();
+           
+           // Submit extrinsic and verify success
+           assert_ok!(ZkPrivacy::private_transfer(
+               Origin::signed(alice),
+               proof,
+               nullifier_hash,
+               commitment
+           ));
+           
+           // Verify state changes (nullifier is recorded, etc.)
+           assert!(ZkPrivacy::nullifiers(nullifier_hash));
+       });
+   }
+   
+   #[test]
+   fn test_unshield_extrinsic() {
+       new_test_ext().execute_with(|| {
+           // Set up test accounts and initial state
+           
+           // Generate valid proof for unshield
+           let proof = generate_test_unshield_proof();
+           
+           // Submit extrinsic and verify success
+           assert_ok!(ZkPrivacy::unshield(
+               Origin::signed(alice),
+               proof,
+               nullifier_hash,
+               bob,
+               100
+           ));
+           
+           // Verify state changes (nullifier is recorded, funds transferred)
+           assert!(ZkPrivacy::nullifiers(nullifier_hash));
+           assert_eq!(Balances::free_balance(bob), initial_balance + 100);
+       });
+   }
+   ```
+
+4. Test double-spending prevention:
+   ```rust
+   #[test]
+   fn test_prevent_double_spending() {
+       new_test_ext().execute_with(|| {
+           // First transaction should succeed
+           assert_ok!(ZkPrivacy::private_transfer(/* ... */));
+           
+           // Second transaction with same nullifier should fail
+           assert_noop!(
+               ZkPrivacy::private_transfer(/* same nullifier_hash */),
+               Error::<Test>::NullifierAlreadyUsed
+           );
+       });
+   }
+   ```
+
+5. Performance testing:
+   - Measure proof generation time
+   - Measure verification time
+   - Estimate gas costs for on-chain verification
+   - Test with different parameter sizes to find optimal balance
+
+6. Security testing:
+   - Attempt to create false proofs
+   - Try to reuse nullifiers
+   - Attempt to create notes with negative values
+   - Try to create unbalanced transfers (output > input)
+
+7. End-to-end testing with CLI or UI:
+   - Create a test script that generates notes, creates proofs, and submits transactions
+   - Verify the entire flow from note creation to successful transaction verification
+
+# Subtasks:
+## 1. Define Note Structure and Cryptographic Operations [pending]
+### Dependencies: None
+### Description: Implement the Note structure and related cryptographic operations needed for both private transfer and unshield operations, including commitment and nullifier computation.
+### Details:
+Create a Note struct with fields for value, owner_public_key, and randomness. Implement methods for computing Pedersen commitments and nullifiers. Define the necessary key structures (PublicKey, PrivateKey) and implement cryptographic primitives using arkworks-rs. Ensure the implementation supports the security requirements for zero-knowledge proofs.
+
+## 2. Implement Private Transfer Circuit [pending]
+### Dependencies: 3.1
+### Description: Design and implement the zero-knowledge circuit for private transfers between shielded accounts using arkworks-rs.
+### Details:
+Create the PrivateTransferCircuit struct implementing the ConstraintSynthesizer trait. Implement constraints to verify sender note ownership, ensure value conservation between input and output notes, verify correct computation of the new commitment, and ensure correct computation of the nullifier hash. Use the Note structure from the previous subtask.
+
+## 3. Implement Unshield Circuit [pending]
+### Dependencies: 3.1
+### Description: Design and implement the zero-knowledge circuit for unshield operations that transfer value from shielded to public accounts.
+### Details:
+Create the UnshieldCircuit struct implementing the ConstraintSynthesizer trait. Implement constraints to verify note ownership, ensure correct computation of nullifier hash, verify recipient address derivation from public key, and ensure amount is correctly extracted from the note. Reuse the Note structure and cryptographic operations from the first subtask.
+
+## 4. Implement Setup and Proof Generation Functions [pending]
+### Dependencies: 3.2, 3.3
+### Description: Create functions for generating proving/verification keys and for creating zero-knowledge proofs for both operations.
+### Details:
+Implement setup functions that generate proving and verification keys for both circuits. Create proof generation functions that take the necessary inputs (notes, keys) and produce valid zero-knowledge proofs. Implement verification functions that check the validity of proofs against public inputs. Use the Groth16 proving system from arkworks-rs.
+
+## 5. Integrate with Substrate Runtime [pending]
+### Dependencies: 3.4
+### Description: Integrate the ZK circuits and proof verification into the Substrate runtime as extrinsics for private_transfer and unshield operations.
+### Details:
+Implement pallet extrinsics for private_transfer and unshield that accept proofs and public inputs. Add storage for tracking nullifiers to prevent double-spending. Implement proper serialization/deserialization of circuit parameters and proofs. For unshield operations, implement the logic to transfer funds to the recipient's public account. Add proper error handling for invalid proofs and edge cases.
+

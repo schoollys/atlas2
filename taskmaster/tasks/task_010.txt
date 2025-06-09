@@ -1,0 +1,208 @@
+# Task ID: 10
+# Title: Develop Basic Block Explorer for Transaction Visualization
+# Status: pending
+# Dependencies: 4, 5, 7
+# Priority: medium
+# Description: Create a web-based block explorer that displays public transactions and metadata of private transactions, allowing users to search and view blockchain activity while maintaining privacy guarantees.
+# Details:
+This task involves developing a block explorer interface that provides transparency while respecting privacy requirements:
+
+1. Set up a React-based frontend project:
+```bash
+npx create-react-app aura-block-explorer
+cd aura-block-explorer
+npm install @polkadot/api @polkadot/extension-dapp axios react-router-dom styled-components
+```
+
+2. Implement the core block explorer components:
+   - Block list view showing recent blocks with timestamps, hash, and transaction count
+   - Block detail view showing all transactions in a block
+   - Transaction detail view with different displays for public and private transactions
+   - Search functionality by block number, block hash, transaction hash, or account address
+
+3. For public transactions, display:
+   - Transaction hash
+   - Block number and timestamp
+   - Sender and recipient addresses
+   - Transaction amount and fees
+   - Transaction status (confirmed, pending)
+   - Any additional transaction metadata
+
+4. For private transactions, display limited metadata:
+   - Transaction hash
+   - Block number and timestamp
+   - Transaction type (shield, unshield, private transfer)
+   - Nullifier hash (without revealing actual values)
+   - Commitment hash (without revealing actual values)
+   - ZK-proof verification status
+   - For unshield transactions that have been processed, show the public recipient and amount
+
+5. Implement API services to interact with the blockchain:
+```javascript
+// src/services/api.js
+import { ApiPromise, WsProvider } from '@polkadot/api';
+
+let api = null;
+
+export const initializeApi = async () => {
+  if (!api) {
+    const wsProvider = new WsProvider('ws://localhost:9944');
+    api = await ApiPromise.create({ provider: wsProvider });
+  }
+  return api;
+};
+
+export const getLatestBlocks = async (count = 10) => {
+  const api = await initializeApi();
+  const latestBlockNumber = await api.derive.chain.bestNumber();
+  
+  const blocks = [];
+  for (let i = 0; i < count; i++) {
+    const blockNumber = latestBlockNumber.toNumber() - i;
+    if (blockNumber < 0) break;
+    
+    const blockHash = await api.rpc.chain.getBlockHash(blockNumber);
+    const block = await api.rpc.chain.getBlock(blockHash);
+    const timestamp = await getBlockTimestamp(blockHash);
+    
+    blocks.push({
+      number: blockNumber,
+      hash: blockHash.toString(),
+      timestamp,
+      txCount: block.block.extrinsics.length - 1 // Subtract 1 to exclude the timestamp extrinsic
+    });
+  }
+  
+  return blocks;
+};
+
+export const getBlockDetails = async (blockHashOrNumber) => {
+  // Implementation details
+};
+
+export const getTransactionDetails = async (txHash) => {
+  // Implementation details
+};
+
+export const getShieldedPoolState = async () => {
+  // Get nullifier set and commitment set sizes
+};
+```
+
+6. Create components for visualizing the blockchain data:
+   - BlockList.js - Paginated list of recent blocks
+   - BlockDetails.js - Detailed view of a specific block
+   - TransactionDetails.js - Detailed view of a transaction
+   - SearchBar.js - Search functionality across the blockchain
+   - Dashboard.js - Overview statistics of the blockchain
+
+7. Implement a specialized component for visualizing the shielded pool state:
+```javascript
+// src/components/ShieldedPoolStats.js
+import React, { useEffect, useState } from 'react';
+import { getShieldedPoolState } from '../services/api';
+
+const ShieldedPoolStats = () => {
+  const [stats, setStats] = useState({
+    nullifierSetSize: 0,
+    commitmentSetSize: 0,
+    pendingUnshields: 0
+  });
+  
+  useEffect(() => {
+    const fetchData = async () => {
+      const data = await getShieldedPoolState();
+      setStats(data);
+    };
+    
+    fetchData();
+    const interval = setInterval(fetchData, 30000); // Update every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+  
+  return (
+    <div className="shielded-pool-stats">
+      <h3>Shielded Pool Statistics</h3>
+      <div className="stats-grid">
+        <div className="stat-item">
+          <span className="stat-label">Nullifiers:</span>
+          <span className="stat-value">{stats.nullifierSetSize}</span>
+        </div>
+        <div className="stat-item">
+          <span className="stat-label">Commitments:</span>
+          <span className="stat-value">{stats.commitmentSetSize}</span>
+        </div>
+        <div className="stat-item">
+          <span className="stat-label">Pending Unshields:</span>
+          <span className="stat-value">{stats.pendingUnshields}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ShieldedPoolStats;
+```
+
+8. Implement responsive design to ensure usability across desktop and mobile devices.
+
+9. Add documentation pages explaining:
+   - How to interpret transaction data
+   - Privacy features and what information is deliberately not shown
+   - How to use the explorer effectively
+
+10. Deploy the block explorer to a web server with appropriate caching and performance optimizations.
+
+# Test Strategy:
+To verify the correct implementation of the block explorer:
+
+1. Functional Testing:
+   - Verify that the block explorer correctly displays the latest blocks on the homepage
+   - Test the search functionality with various inputs:
+     - Valid block numbers
+     - Valid transaction hashes
+     - Valid account addresses
+     - Invalid/malformed inputs (should show appropriate error messages)
+   - Confirm that block details page shows all transactions within the block
+   - Verify that transaction details are displayed correctly for different transaction types
+
+2. Privacy Testing:
+   - Confirm that private transaction details only show metadata and not actual values
+   - Verify that nullifiers and commitments are displayed as hashes only
+   - Ensure that no private keys or viewing keys are ever requested or displayed
+   - Test that unshielded transactions only show public information after they've been processed
+
+3. Integration Testing:
+   - Test the block explorer against a local development network:
+     - Generate various transaction types (public transfers, shield, unshield, private transfers)
+     - Verify that all transactions appear correctly in the explorer
+   - Test against a testnet environment with real network conditions
+   - Verify that the explorer correctly handles network latency and reconnection
+
+4. Performance Testing:
+   - Test loading times for the main page and block details pages
+   - Verify that pagination works correctly for large result sets
+   - Test the explorer's performance when displaying blocks with many transactions
+   - Ensure that real-time updates don't cause performance degradation
+
+5. UI/UX Testing:
+   - Test the responsive design on various screen sizes (desktop, tablet, mobile)
+   - Verify that all interactive elements are accessible and function correctly
+   - Test with screen readers and keyboard navigation for accessibility
+   - Verify that error states are clearly communicated to users
+
+6. Browser Compatibility:
+   - Test the explorer in multiple browsers (Chrome, Firefox, Safari, Edge)
+   - Verify that all functionality works consistently across browsers
+
+7. End-to-End Testing:
+   - Create automated tests that simulate user journeys:
+     - Searching for a transaction and viewing its details
+     - Browsing through multiple blocks
+     - Viewing account history
+   - Verify that all links between different views work correctly
+
+8. Security Testing:
+   - Verify that the explorer doesn't expose any sensitive information
+   - Test input validation to prevent XSS or injection attacks
+   - Ensure that API requests are properly rate-limited to prevent abuse

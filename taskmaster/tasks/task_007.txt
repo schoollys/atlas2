@@ -1,0 +1,347 @@
+# Task ID: 7
+# Title: Implement the Unshielding Pool and Batch Processing Logic
+# Status: pending
+# Dependencies: 4, 5
+# Priority: medium
+# Description: Implement the unshielding pool mechanism and batch processing logic to efficiently handle unshield requests and process them in batches as specified in the PRD.
+# Details:
+This task involves implementing the unshielding pool and batch processing logic:
+
+1. Extend the pallet-shielded-pool to include the unshielding pool storage:
+```rust
+#[pallet::storage]
+pub type UnshieldingPool<T: Config> = StorageMap<_, Blake2_128Concat, T::BlockNumber, Vec<UnshieldRequest<T>>>;
+
+#[pallet::storage]
+pub type NextUnshieldBatchBlock<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, Debug, TypeInfo)]
+pub struct UnshieldRequest<T: Config> {
+    pub nullifier: Nullifier,
+    pub recipient: T::AccountId,
+    pub amount: BalanceOf<T>,
+    pub proof: Vec<u8>,
+}
+```
+
+2. Implement the batch processing logic in the on_finalize hook:
+```rust
+fn on_finalize(n: T::BlockNumber) {
+    if n == Self::next_unshield_batch_block() {
+        Self::process_unshield_batch(n);
+        
+        // Schedule next batch processing
+        let next_batch_block = n + T::UnshieldBatchInterval::get();
+        NextUnshieldBatchBlock::<T>::put(next_batch_block);
+    }
+}
+
+fn process_unshield_batch(block_number: T::BlockNumber) {
+    if let Some(requests) = UnshieldingPool::<T>::take(block_number) {
+        for request in requests {
+            if Self::verify_unshield_proof(&request.nullifier, &request.proof) {
+                // Transfer funds from shielded pool to recipient
+                let _ = T::Currency::transfer(
+                    &Self::account_id(),
+                    &request.recipient,
+                    request.amount,
+                    ExistenceRequirement::KeepAlive
+                );
+                
+                // Record nullifier as spent
+                Nullifiers::<T>::insert(request.nullifier, ());
+                
+                // Emit event
+                Self::deposit_event(Event::UnshieldSuccessful(
+                    request.recipient,
+                    request.amount,
+                    request.nullifier
+                ));
+            } else {
+                // Emit failure event
+                Self::deposit_event(Event::UnshieldFailed(
+                    request.recipient,
+                    request.amount,
+                    request.nullifier
+                ));
+            }
+        }
+    }
+}
+```
+
+3. Modify the unshield_request function to add requests to the pool instead of processing immediately:
+```rust
+#[pallet::weight(T::WeightInfo::unshield_request())]
+pub fn unshield_request(
+    origin: OriginFor<T>,
+    nullifier: Nullifier,
+    recipient: T::AccountId,
+    amount: BalanceOf<T>,
+    proof: Vec<u8>,
+) -> DispatchResult {
+    ensure_signed(origin)?;
+    
+    // Ensure nullifier hasn't been spent
+    ensure!(!Nullifiers::<T>::contains_key(&nullifier), Error::<T>::NullifierAlreadyUsed);
+    
+    // Create unshield request
+    let request = UnshieldRequest {
+        nullifier,
+        recipient,
+        amount,
+        proof,
+    };
+    
+    // Add to the next batch
+    let next_batch_block = Self::next_unshield_batch_block();
+    UnshieldingPool::<T>::append(next_batch_block, request);
+    
+    // Emit event
+    Self::deposit_event(Event::UnshieldRequested(recipient, amount, nullifier));
+    
+    Ok(())
+}
+```
+
+4. Add configuration trait for batch processing parameters:
+```rust
+#[pallet::config]
+pub trait Config: frame_system::Config {
+    // Existing configuration items...
+    
+    /// The interval (in blocks) at which unshield batches are processed
+    #[pallet::constant]
+    type UnshieldBatchInterval: Get<Self::BlockNumber>;
+    
+    /// The maximum number of unshield requests per batch
+    #[pallet::constant]
+    type MaxUnshieldRequestsPerBatch: Get<u32>;
+}
+```
+
+5. Initialize the batch processing in the on_genesis_build hook:
+```rust
+#[pallet::genesis_build]
+impl<T: Config> GenesisBuild<T> for GenesisConfig {
+    fn build(&self) {
+        // Set initial batch processing block
+        let first_batch_block = T::BlockNumber::from(1u32) + T::UnshieldBatchInterval::get();
+        NextUnshieldBatchBlock::<T>::put(first_batch_block);
+    }
+}
+```
+
+6. Add new events for unshielding pool operations:
+```rust
+#[pallet::event]
+#[pallet::generate_deposit(pub(super) fn deposit_event)]
+pub enum Event<T: Config> {
+    // Existing events...
+    
+    /// An unshield request was added to the pool
+    UnshieldRequested(T::AccountId, BalanceOf<T>, Nullifier),
+    
+    /// An unshield operation was successfully processed from the pool
+    UnshieldSuccessful(T::AccountId, BalanceOf<T>, Nullifier),
+    
+    /// An unshield operation failed during batch processing
+    UnshieldFailed(T::AccountId, BalanceOf<T>, Nullifier),
+}
+```
+
+7. Implement a query function to check pending unshield requests:
+```rust
+#[pallet::call]
+impl<T: Config> Pallet<T> {
+    // Existing functions...
+    
+    #[pallet::weight(T::WeightInfo::get_pending_unshield_requests())]
+    pub fn get_pending_unshield_requests(
+        origin: OriginFor<T>,
+        account: T::AccountId,
+    ) -> Vec<UnshieldRequest<T>> {
+        ensure_signed(origin)?;
+        
+        let next_batch_block = Self::next_unshield_batch_block();
+        if let Some(requests) = UnshieldingPool::<T>::get(next_batch_block) {
+            requests.into_iter()
+                .filter(|req| req.recipient == account)
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+}
+```
+
+8. Update the runtime to configure the new parameters:
+```rust
+parameter_types! {
+    pub const UnshieldBatchInterval: BlockNumber = 10; // Process every 10 blocks
+    pub const MaxUnshieldRequestsPerBatch: u32 = 50; // Maximum 50 requests per batch
+}
+
+impl pallet_shielded_pool::Config for Runtime {
+    // Existing configuration...
+    type UnshieldBatchInterval = UnshieldBatchInterval;
+    type MaxUnshieldRequestsPerBatch = MaxUnshieldRequestsPerBatch;
+}
+```
+
+# Test Strategy:
+To verify the correct implementation of the unshielding pool and batch processing logic:
+
+1. Unit Tests:
+   - Create unit tests for the unshielding pool storage and batch processing logic:
+   ```rust
+   #[test]
+   fn test_unshield_request_adds_to_pool() {
+       new_test_ext().execute_with(|| {
+           // Setup test environment
+           let recipient = account_id(1);
+           let amount = 100;
+           let nullifier = [1u8; 32];
+           let proof = vec![0u8; 64];
+           
+           // Submit unshield request
+           assert_ok!(ShieldedPool::unshield_request(
+               Origin::signed(account_id(2)),
+               nullifier,
+               recipient.clone(),
+               amount,
+               proof.clone()
+           ));
+           
+           // Check request was added to pool
+           let next_batch_block = ShieldedPool::next_unshield_batch_block();
+           let requests = UnshieldingPool::<Test>::get(next_batch_block).unwrap();
+           assert_eq!(requests.len(), 1);
+           assert_eq!(requests[0].recipient, recipient);
+           assert_eq!(requests[0].amount, amount);
+           assert_eq!(requests[0].nullifier, nullifier);
+       });
+   }
+   
+   #[test]
+   fn test_batch_processing() {
+       new_test_ext().execute_with(|| {
+           // Setup test environment
+           let recipient = account_id(1);
+           let amount = 100;
+           let nullifier = [1u8; 32];
+           let proof = vec![0u8; 64]; // Valid proof
+           
+           // Fund the shielded pool account
+           let _ = Balances::deposit_creating(&ShieldedPool::account_id(), 1000);
+           
+           // Submit unshield request
+           assert_ok!(ShieldedPool::unshield_request(
+               Origin::signed(account_id(2)),
+               nullifier,
+               recipient.clone(),
+               amount,
+               proof.clone()
+           ));
+           
+           // Fast forward to batch processing block
+           let batch_block = ShieldedPool::next_unshield_batch_block();
+           System::set_block_number(batch_block);
+           ShieldedPool::on_finalize(batch_block);
+           
+           // Check request was processed
+           assert_eq!(Balances::free_balance(recipient), amount);
+           assert!(Nullifiers::<Test>::contains_key(nullifier));
+           
+           // Check pool is empty
+           assert!(UnshieldingPool::<Test>::get(batch_block).is_none());
+           
+           // Check next batch block was scheduled
+           assert_eq!(
+               ShieldedPool::next_unshield_batch_block(),
+               batch_block + UnshieldBatchInterval::get()
+           );
+       });
+   }
+   ```
+
+2. Integration Tests:
+   - Test the full unshielding flow from request to batch processing:
+   ```rust
+   #[test]
+   fn test_unshield_flow() {
+       ExtBuilder::default().build().execute_with(|| {
+           // Create multiple unshield requests
+           for i in 1..5 {
+               let recipient = account_id(i);
+               let amount = i * 100;
+               let nullifier = [i as u8; 32];
+               let proof = vec![0u8; 64]; // Mock valid proof
+               
+               assert_ok!(ShieldedPool::unshield_request(
+                   Origin::signed(account_id(10)),
+                   nullifier,
+                   recipient,
+                   amount,
+                   proof
+               ));
+           }
+           
+           // Process batch
+           let batch_block = ShieldedPool::next_unshield_batch_block();
+           run_to_block(batch_block);
+           
+           // Verify all recipients received funds
+           for i in 1..5 {
+               assert_eq!(Balances::free_balance(account_id(i)), i * 100);
+           }
+       });
+   }
+   ```
+
+3. Mock Runtime Tests:
+   - Test with different batch intervals and maximum batch sizes:
+   ```rust
+   #[test]
+   fn test_batch_size_limits() {
+       // Configure mock with small batch size
+       MockBuilder::default()
+           .max_unshield_requests_per_batch(3)
+           .build()
+           .execute_with(|| {
+               // Submit 5 requests (exceeding batch size)
+               for i in 1..6 {
+                   // Submit request code...
+               }
+               
+               // Process batch
+               let batch_block = ShieldedPool::next_unshield_batch_block();
+               run_to_block(batch_block);
+               
+               // Verify only first 3 were processed
+               // Verification code...
+           });
+   }
+   ```
+
+4. Manual Testing:
+   - Deploy to a development network and use the CLI wallet to:
+     - Submit multiple unshield requests
+     - Wait for batch processing blocks
+     - Verify funds are received by recipients
+     - Check events for successful unshielding operations
+
+5. Performance Testing:
+   - Test with different batch sizes to determine optimal configuration:
+   ```bash
+   # Script to measure processing time with different batch sizes
+   for size in 10 50 100 200; do
+       cargo run --release -- benchmark --pallet pallet_shielded_pool --extrinsic process_unshield_batch --repeat 10 --batch-size $size
+   done
+   ```
+
+6. Edge Case Testing:
+   - Test behavior when a nullifier is submitted twice in the same batch
+   - Test with invalid proofs to ensure they're rejected during batch processing
+   - Test with zero amounts and ensure proper handling
+   - Test when the shielded pool has insufficient funds for all requests

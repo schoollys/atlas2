@@ -1,0 +1,255 @@
+# Task ID: 9
+# Title: Implement Progressive Difficulty Adjustment Based on Network Load
+# Status: pending
+# Dependencies: 4, 5, 7
+# Priority: medium
+# Description: Develop a dynamic fee adjustment mechanism that increases transaction fees based on network load to ensure system stability and prevent spam attacks.
+# Details:
+This task involves implementing a progressive difficulty increase mechanism through transaction fee adjustments based on network load:
+
+1. Extend the runtime configuration to include network load parameters:
+```rust
+#[pallet::config]
+pub trait Config: frame_system::Config {
+    // Existing configuration items...
+    
+    /// The base fee for transactions
+    type BaseFee: Get<BalanceOf<Self>>;
+    
+    /// The multiplier for fee adjustments
+    type FeeAdjustmentMultiplier: Get<BalanceOf<Self>>;
+    
+    /// The threshold for considering the network under high load
+    type HighLoadThreshold: Get<u32>;
+}
+```
+
+2. Add storage items to track network load metrics:
+```rust
+#[pallet::storage]
+pub type CurrentNetworkLoad<T: Config> = StorageValue<_, u32, ValueQuery>;
+
+#[pallet::storage]
+pub type CurrentFeeMultiplier<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+```
+
+3. Implement a function to calculate the current network load based on:
+   - Number of transactions in the transaction pool
+   - Block fullness (percentage of block weight used)
+   - Recent block production time
+
+```rust
+fn calculate_network_load() -> u32 {
+    let txpool_size = self.transaction_pool.ready_len() as u32;
+    let block_weight_percentage = Self::block_weight_percentage();
+    let block_production_time = Self::average_block_production_time();
+    
+    // Combine metrics with appropriate weights
+    let load = (txpool_size * 2) + (block_weight_percentage * 3) + 
+               (block_production_time_factor * 1);
+    
+    load.min(100) // Normalize to 0-100 scale
+}
+```
+
+4. Implement the fee adjustment logic in the on_initialize hook:
+```rust
+#[pallet::hooks]
+impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+    fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
+        // Calculate current network load
+        let network_load = Self::calculate_network_load();
+        <CurrentNetworkLoad<T>>::put(network_load);
+        
+        // Adjust fee multiplier based on network load
+        let new_multiplier = if network_load > T::HighLoadThreshold::get() {
+            // Progressive increase based on how much the threshold is exceeded
+            let excess_load = network_load - T::HighLoadThreshold::get();
+            let adjustment_factor = BalanceOf::<T>::from(excess_load as u32) * 
+                                   T::FeeAdjustmentMultiplier::get() / 100;
+            
+            // Apply a progressive curve (e.g., quadratic) for steeper increases under high load
+            let base_multiplier = BalanceOf::<T>::from(1u32);
+            base_multiplier + adjustment_factor.pow(2)
+        } else {
+            // Normal load, use base multiplier
+            BalanceOf::<T>::from(1u32)
+        };
+        
+        <CurrentFeeMultiplier<T>>::put(new_multiplier);
+        
+        T::DbWeight::get().reads_writes(3, 2)
+    }
+}
+```
+
+5. Modify the transaction payment mechanism to incorporate the dynamic fee multiplier:
+```rust
+impl<T: Config> pallet_transaction_payment::Config for Runtime {
+    // Existing configuration...
+    
+    type FeeMultiplierUpdate = CustomFeeMultiplier<Runtime>;
+}
+
+pub struct CustomFeeMultiplier<T>(sp_std::marker::PhantomData<T>);
+
+impl<T: Config> Convert<Multiplier, Multiplier> for CustomFeeMultiplier<T> {
+    fn convert(previous: Multiplier) -> Multiplier {
+        let network_multiplier = <pallet_shielded_pool::Pallet<T>>::current_fee_multiplier();
+        
+        // Combine with existing multiplier logic
+        let next = previous.saturating_mul(network_multiplier.into());
+        
+        // Ensure the multiplier stays within reasonable bounds
+        next.max(Multiplier::saturating_from_rational(1, 2))
+            .min(Multiplier::saturating_from_rational(1000, 1))
+    }
+}
+```
+
+6. Add RPC methods to query the current network load and fee multiplier:
+```rust
+#[rpc]
+pub trait ShieldedPoolApi<BlockHash> {
+    #[rpc(name = "shieldedPool_getNetworkLoad")]
+    fn get_network_load(&self, at: Option<BlockHash>) -> Result<u32>;
+    
+    #[rpc(name = "shieldedPool_getCurrentFeeMultiplier")]
+    fn get_current_fee_multiplier(&self, at: Option<BlockHash>) -> Result<u128>;
+}
+```
+
+7. Update the wallet applications (both CLI and Tauri-based) to display the current network load and estimated transaction fees before submitting transactions.
+
+8. Implement a cooldown mechanism to prevent fee volatility:
+```rust
+#[pallet::storage]
+pub type LastFeeAdjustmentBlock<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+
+// In the fee adjustment logic:
+let current_block = <frame_system::Pallet<T>>::block_number();
+let last_adjustment = <LastFeeAdjustmentBlock<T>>::get();
+
+if current_block > last_adjustment + T::FeeAdjustmentCooldown::get() {
+    // Perform fee adjustment
+    <LastFeeAdjustmentBlock<T>>::put(current_block);
+}
+```
+
+9. Add configuration parameters to the chain specification to allow for easy tuning of the fee adjustment mechanism.
+
+# Test Strategy:
+To verify the correct implementation of the progressive difficulty adjustment:
+
+1. Unit Tests:
+   - Create unit tests for the network load calculation function with various input scenarios
+   - Test the fee multiplier calculation with different network load values
+   - Verify the cooldown mechanism prevents too frequent adjustments
+   ```rust
+   #[test]
+   fn test_fee_adjustment_under_load() {
+       ExtBuilder::default().build().execute_with(|| {
+           // Simulate high network load
+           mock_transaction_pool_size(500);
+           mock_block_weight(80); // 80% full
+           
+           // Trigger on_initialize
+           ShieldedPool::on_initialize(System::block_number());
+           
+           // Verify network load calculation
+           assert_eq!(ShieldedPool::current_network_load(), 85);
+           
+           // Verify fee multiplier was increased
+           assert!(ShieldedPool::current_fee_multiplier() > 1.into());
+       });
+   }
+   ```
+
+2. Integration Tests:
+   - Create a test that simulates increasing network load by submitting many transactions
+   - Verify that fees increase progressively as the load increases
+   - Test that fees return to normal when load decreases
+   ```rust
+   #[test]
+   fn test_progressive_fee_increase() {
+       let mut ext = ExtBuilder::default().build();
+       
+       ext.execute_with(|| {
+           let initial_fee = TransactionPayment::compute_fee(
+               100, &default_call(), &default_info()
+           );
+           
+           // Submit transactions to increase load
+           for _ in 0..100 {
+               submit_test_transaction();
+           }
+           
+           run_to_next_block();
+           
+           let high_load_fee = TransactionPayment::compute_fee(
+               100, &default_call(), &default_info()
+           );
+           
+           // Fee should be higher under load
+           assert!(high_load_fee > initial_fee);
+           
+           // Submit more transactions to increase load further
+           for _ in 0..200 {
+               submit_test_transaction();
+           }
+           
+           run_to_next_block();
+           
+           let very_high_load_fee = TransactionPayment::compute_fee(
+               100, &default_call(), &default_info()
+           );
+           
+           // Fee should increase progressively (more than linear)
+           let first_increase = high_load_fee - initial_fee;
+           let second_increase = very_high_load_fee - high_load_fee;
+           assert!(second_increase > first_increase);
+       });
+   }
+   ```
+
+3. Manual Testing:
+   - Deploy to a test network and use a load generation tool to create artificial network congestion
+   - Monitor the network load metrics and fee adjustments through RPC calls
+   - Verify that the system responds appropriately to different load levels
+
+4. Performance Testing:
+   - Measure the computational overhead of the network load calculation
+   - Ensure the fee adjustment logic doesn't add significant block production overhead
+   - Test with extreme load scenarios to verify system stability
+
+5. UI Testing:
+   - Verify that both CLI and Tauri wallets correctly display the current network load
+   - Test that fee estimates are accurate before transaction submission
+   - Ensure users are properly notified when network load is high
+
+6. Benchmark Tests:
+   ```rust
+   #[benchmarks]
+   mod benchmarks {
+       use super::*;
+       
+       #[benchmark]
+       fn calculate_network_load() {
+           #[block] {
+               let _ = Pallet::<T>::calculate_network_load();
+           }
+       }
+       
+       #[benchmark]
+       fn adjust_fee_multiplier() {
+           #[block] {
+               let _ = Pallet::<T>::on_initialize(frame_system::Pallet::<T>::block_number());
+           }
+       }
+   }
+   ```
+
+7. Documentation and Monitoring:
+   - Document the fee adjustment mechanism for users
+   - Implement monitoring tools to track network load and fee adjustments over time
+   - Create alerts for abnormal fee increases that might indicate attacks or issues

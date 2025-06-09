@@ -1,0 +1,473 @@
+# Task ID: 6
+# Title: Develop CLI Wallet for Key Generation, Proof Creation, and Transaction Signing
+# Status: pending
+# Dependencies: 3, 4, 5
+# Priority: medium
+# Description: Create a command-line interface wallet application capable of generating cryptographic keys, creating zero-knowledge proofs, and signing all transaction types for both public and private operations as specified in the PRD.
+# Details:
+This task involves developing a comprehensive CLI wallet application that interacts with the blockchain:
+
+1. Set up the project structure:
+```bash
+cargo new atlas-cli-wallet --bin
+cd atlas-cli-wallet
+```
+
+2. Add necessary dependencies to Cargo.toml:
+```toml
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+sp-core = { version = "7.0.0", default-features = false }
+sp-runtime = { version = "7.0.0", default-features = false }
+ark-bn254 = "0.3.0"
+ark-ff = "0.3.0"
+ark-ec = "0.3.0"
+ark-std = "0.3.0"
+rand = "0.8.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+hex = "0.4.3"
+subxt = "0.25.0"
+tokio = { version = "1.0", features = ["full"] }
+```
+
+3. Implement key management functionality:
+```rust
+mod keys {
+    use sp_core::{sr25519, Pair, Public};
+    use sp_runtime::MultiSigner;
+    use std::path::PathBuf;
+    
+    pub struct KeyPair {
+        public: Public,
+        private: String, // Encrypted or secured storage
+    }
+    
+    pub fn generate_keypair(password: &str) -> KeyPair {
+        // Generate sr25519 keypair for public transactions
+        let (pair, _) = sr25519::Pair::generate();
+        // Secure the private key with password
+        let private = encrypt_private_key(pair.to_seed(), password);
+        
+        KeyPair {
+            public: pair.public(),
+            private,
+        }
+    }
+    
+    pub fn load_keypair(path: PathBuf, password: &str) -> Result<KeyPair, Error> {
+        // Load and decrypt keypair from file
+    }
+    
+    pub fn save_keypair(keypair: &KeyPair, path: PathBuf) -> Result<(), Error> {
+        // Save encrypted keypair to file
+    }
+}
+```
+
+4. Implement ZK proof generation for private transactions:
+```rust
+mod proofs {
+    use ark_bn254::{Bn254, Fr};
+    use ark_ff::UniformRand;
+    use ark_std::rand::thread_rng;
+    
+    pub struct PrivateTransferProof {
+        proof_data: Vec<u8>,
+        public_inputs: Vec<Fr>,
+    }
+    
+    pub struct UnshieldProof {
+        proof_data: Vec<u8>,
+        public_inputs: Vec<Fr>,
+    }
+    
+    pub fn generate_private_transfer_proof(
+        sender_note: &[u8],
+        recipient_note: &[u8],
+        amount: u128,
+        sender_private_key: &[u8]
+    ) -> PrivateTransferProof {
+        // Generate ZK proof for private transfer using the circuit from Task 3
+        // This will use the same circuit logic but packaged for CLI use
+    }
+    
+    pub fn generate_unshield_proof(
+        sender_note: &[u8],
+        recipient_public_key: &[u8],
+        amount: u128,
+        sender_private_key: &[u8]
+    ) -> UnshieldProof {
+        // Generate ZK proof for unshielding using the circuit from Task 3
+    }
+}
+```
+
+5. Implement transaction signing for all transaction types:
+```rust
+mod transactions {
+    use sp_core::{sr25519, Pair};
+    use sp_runtime::MultiSignature;
+    use subxt::{tx::PairSigner, OnlineClient, PolkadotConfig};
+    
+    pub async fn sign_public_transfer(
+        pair: &sr25519::Pair,
+        recipient: &str,
+        amount: u128,
+        client: &OnlineClient<PolkadotConfig>,
+    ) -> Result<String, Error> {
+        // Create and sign a public transfer transaction
+    }
+    
+    pub async fn sign_shield_transaction(
+        pair: &sr25519::Pair,
+        amount: u128,
+        recipient_note: &[u8],
+        client: &OnlineClient<PolkadotConfig>,
+    ) -> Result<String, Error> {
+        // Create and sign a shield transaction
+    }
+    
+    pub async fn sign_private_transfer(
+        proof: &proofs::PrivateTransferProof,
+        client: &OnlineClient<PolkadotConfig>,
+    ) -> Result<String, Error> {
+        // Create and sign a private transfer transaction with the proof
+    }
+    
+    pub async fn sign_unshield_request(
+        proof: &proofs::UnshieldProof,
+        client: &OnlineClient<PolkadotConfig>,
+    ) -> Result<String, Error> {
+        // Create and sign an unshield request transaction with the proof
+    }
+}
+```
+
+6. Implement the CLI interface using clap:
+```rust
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Generate a new keypair
+    GenerateKeys {
+        #[arg(short, long)]
+        output: PathBuf,
+        
+        #[arg(short, long)]
+        password: String,
+    },
+    
+    /// Create a public transfer transaction
+    PublicTransfer {
+        #[arg(short, long)]
+        from_key: PathBuf,
+        
+        #[arg(short, long)]
+        to_address: String,
+        
+        #[arg(short, long)]
+        amount: u128,
+        
+        #[arg(short, long)]
+        password: String,
+    },
+    
+    /// Create a shield transaction
+    Shield {
+        #[arg(short, long)]
+        from_key: PathBuf,
+        
+        #[arg(short, long)]
+        recipient_note: String,
+        
+        #[arg(short, long)]
+        amount: u128,
+        
+        #[arg(short, long)]
+        password: String,
+    },
+    
+    /// Create a private transfer transaction
+    PrivateTransfer {
+        #[arg(short, long)]
+        sender_note: String,
+        
+        #[arg(short, long)]
+        recipient_note: String,
+        
+        #[arg(short, long)]
+        amount: u128,
+        
+        #[arg(short, long)]
+        sender_private_key: String,
+    },
+    
+    /// Create an unshield request transaction
+    UnshieldRequest {
+        #[arg(short, long)]
+        sender_note: String,
+        
+        #[arg(short, long)]
+        recipient_public_key: String,
+        
+        #[arg(short, long)]
+        amount: u128,
+        
+        #[arg(short, long)]
+        sender_private_key: String,
+    },
+}
+```
+
+7. Implement the main function to handle CLI commands:
+```rust
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+    
+    // Connect to the node
+    let client = OnlineClient::<PolkadotConfig>::new().await?;
+    
+    match &cli.command {
+        Commands::GenerateKeys { output, password } => {
+            let keypair = keys::generate_keypair(password);
+            keys::save_keypair(&keypair, output.clone())?;
+            println!("Generated keypair and saved to {:?}", output);
+        },
+        
+        Commands::PublicTransfer { from_key, to_address, amount, password } => {
+            let keypair = keys::load_keypair(from_key.clone(), password)?;
+            let pair = keypair.to_sr25519_pair()?;
+            
+            let tx_hash = transactions::sign_public_transfer(
+                &pair, 
+                to_address, 
+                *amount, 
+                &client
+            ).await?;
+            
+            println!("Transaction submitted: {}", tx_hash);
+        },
+        
+        // Implement other command handlers similarly
+    }
+    
+    Ok(())
+}
+```
+
+8. Implement note management for private transactions:
+```rust
+mod notes {
+    use ark_bn254::Fr;
+    use ark_ff::UniformRand;
+    use ark_std::rand::thread_rng;
+    
+    pub struct Note {
+        pub value: u128,
+        pub randomness: Fr,
+        pub owner_private_key: Vec<u8>,
+    }
+    
+    pub fn generate_note(value: u128, owner_private_key: &[u8]) -> Note {
+        let mut rng = thread_rng();
+        let randomness = Fr::rand(&mut rng);
+        
+        Note {
+            value,
+            randomness,
+            owner_private_key: owner_private_key.to_vec(),
+        }
+    }
+    
+    pub fn note_to_bytes(note: &Note) -> Vec<u8> {
+        // Serialize note to bytes
+    }
+    
+    pub fn bytes_to_note(bytes: &[u8]) -> Result<Note, Error> {
+        // Deserialize note from bytes
+    }
+}
+```
+
+9. Implement configuration management:
+```rust
+mod config {
+    use serde::{Deserialize, Serialize};
+    use std::fs;
+    use std::path::Path;
+    
+    #[derive(Serialize, Deserialize)]
+    pub struct WalletConfig {
+        pub node_url: String,
+        pub keys_path: String,
+        pub notes_path: String,
+    }
+    
+    pub fn load_config(path: &Path) -> Result<WalletConfig, Error> {
+        let config_str = fs::read_to_string(path)?;
+        let config: WalletConfig = serde_json::from_str(&config_str)?;
+        Ok(config)
+    }
+    
+    pub fn save_config(config: &WalletConfig, path: &Path) -> Result<(), Error> {
+        let config_str = serde_json::to_string_pretty(config)?;
+        fs::write(path, config_str)?;
+        Ok(())
+    }
+}
+```
+
+10. Implement error handling throughout the application:
+```rust
+#[derive(Debug)]
+pub enum WalletError {
+    KeyManagementError(String),
+    ProofGenerationError(String),
+    TransactionError(String),
+    NetworkError(String),
+    ConfigError(String),
+    IOError(std::io::Error),
+}
+
+impl From<std::io::Error> for WalletError {
+    fn from(error: std::io::Error) -> Self {
+        WalletError::IOError(error)
+    }
+}
+
+// Implement other From traits for error conversion
+```
+
+# Test Strategy:
+To verify the correct implementation and functionality of the CLI wallet, follow these testing steps:
+
+1. Unit Testing:
+   - Create unit tests for each module (keys, proofs, transactions, notes, config):
+   ```bash
+   cargo test --lib
+   ```
+   - Ensure key generation and management functions work correctly:
+   ```rust
+   #[test]
+   fn test_keypair_generation() {
+       let password = "test_password";
+       let keypair = keys::generate_keypair(password);
+       assert!(keypair.public.to_string().starts_with("0x"));
+   }
+   ```
+   - Test proof generation with mock inputs:
+   ```rust
+   #[test]
+   fn test_private_transfer_proof_generation() {
+       let sender_note = [1, 2, 3, 4];
+       let recipient_note = [5, 6, 7, 8];
+       let amount = 100;
+       let sender_private_key = [9, 10, 11, 12];
+       
+       let proof = proofs::generate_private_transfer_proof(
+           &sender_note,
+           &recipient_note,
+           amount,
+           &sender_private_key
+       );
+       
+       assert!(!proof.proof_data.is_empty());
+       assert!(!proof.public_inputs.is_empty());
+   }
+   ```
+
+2. Integration Testing:
+   - Create a local test network using the Substrate node from previous tasks:
+   ```bash
+   cd ../substrate-node
+   cargo run -- --dev
+   ```
+   - Test the CLI wallet against the local network:
+   ```bash
+   cd ../atlas-cli-wallet
+   cargo run -- generate-keys -o ./test_key.json -p test_password
+   cargo run -- public-transfer -f ./test_key.json -t 5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY -a 1000 -p test_password
+   ```
+
+3. End-to-End Testing:
+   - Create a test script that performs a complete workflow:
+   ```bash
+   #!/bin/bash
+   
+   # Generate keys
+   cargo run -- generate-keys -o ./alice.json -p alice_password
+   cargo run -- generate-keys -o ./bob.json -p bob_password
+   
+   # Get Alice's address
+   ALICE_ADDRESS=$(cargo run -- show-address -k ./alice.json -p alice_password)
+   
+   # Get Bob's address
+   BOB_ADDRESS=$(cargo run -- show-address -k ./bob.json -p bob_password)
+   
+   # Create a shield transaction
+   cargo run -- shield -f ./alice.json -r "recipient_note_for_alice" -a 1000 -p alice_password
+   
+   # Create a private transfer
+   cargo run -- private-transfer -s "alice_note" -r "recipient_note_for_bob" -a 500 -k ./alice_private_key.json
+   
+   # Create an unshield request
+   cargo run -- unshield-request -s "bob_note" -r "$BOB_ADDRESS" -a 250 -k ./bob_private_key.json
+   ```
+
+4. Verification of ZK Proof Integration:
+   - Verify that the proofs generated by the CLI wallet are accepted by the blockchain:
+   ```bash
+   # Generate a proof for private transfer
+   PROOF_FILE=$(cargo run -- generate-proof private-transfer -s "alice_note" -r "bob_note" -a 500 -k ./alice_private_key.json -o ./proof.json)
+   
+   # Submit the proof to the blockchain
+   cargo run -- submit-proof -f ./proof.json
+   
+   # Check transaction status
+   cargo run -- check-tx -t $TX_HASH
+   ```
+
+5. Security Testing:
+   - Attempt to use incorrect passwords:
+   ```bash
+   cargo run -- public-transfer -f ./alice.json -t "$BOB_ADDRESS" -a 1000 -p wrong_password
+   # Should fail with appropriate error message
+   ```
+   - Attempt to create invalid proofs:
+   ```bash
+   # Modify a valid proof file to be invalid
+   sed -i 's/some_value/invalid_value/' ./proof.json
+   
+   # Submit the invalid proof
+   cargo run -- submit-proof -f ./proof.json
+   # Should fail with appropriate error message
+   ```
+
+6. Performance Testing:
+   - Measure the time taken to generate proofs:
+   ```bash
+   time cargo run -- generate-proof private-transfer -s "alice_note" -r "bob_note" -a 500 -k ./alice_private_key.json -o ./proof.json
+   ```
+   - Ensure proof generation completes within acceptable time limits (e.g., < 10 seconds)
+
+7. Documentation Testing:
+   - Verify that help commands work correctly:
+   ```bash
+   cargo run -- --help
+   cargo run -- generate-keys --help
+   ```
+   - Ensure all commands are properly documented with examples
+
+8. Cross-platform Testing:
+   - Test the CLI wallet on different operating systems (Linux, macOS, Windows)
+   - Ensure consistent behavior across platforms

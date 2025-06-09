@@ -1,0 +1,505 @@
+# Task ID: 5
+# Title: Implement Native Gateway Functions in pallet-shielded-pool
+# Status: pending
+# Dependencies: 4
+# Priority: medium
+# Description: Implement the shield and unshield_request native gateway functions within pallet-shielded-pool to enable transfers between public and private ledgers as specified in the PRD.
+# Details:
+This task involves implementing the gateway functions that bridge the public and private ledgers:
+
+1. Implement the `shield` function in pallet-shielded-pool:
+```rust
+#[pallet::call]
+impl<T: Config> Pallet<T> {
+    #[pallet::weight(T::WeightInfo::shield())]
+    pub fn shield(
+        origin: OriginFor<T>,
+        amount: BalanceOf<T>,
+        recipient_note: Vec<u8>,
+    ) -> DispatchResult {
+        let sender = ensure_signed(origin)?;
+        
+        // Verify the recipient note format
+        ensure!(recipient_note.len() == NOTE_SIZE, Error::<T>::InvalidNoteFormat);
+        
+        // Transfer tokens from sender's public balance to pallet account
+        <pallet_balances::Pallet<T>>::transfer(
+            origin,
+            T::PalletId::get().into_account_truncating(),
+            amount,
+        )?;
+        
+        // Create a new commitment from the note
+        let commitment = Self::compute_commitment(&recipient_note)?;
+        
+        // Add the commitment to the commitment tree
+        Self::insert_commitment(commitment)?;
+        
+        // Emit shield event
+        Self::deposit_event(Event::Shielded { 
+            from: sender, 
+            amount, 
+            commitment 
+        });
+        
+        Ok(())
+    }
+}
+```
+
+2. Implement the `unshield_request` function:
+```rust
+#[pallet::call]
+impl<T: Config> Pallet<T> {
+    #[pallet::weight(T::WeightInfo::unshield_request())]
+    pub fn unshield_request(
+        origin: OriginFor<T>,
+        proof: Vec<u8>,
+        root: T::Hash,
+        nullifier: T::Hash,
+        recipient: T::AccountId,
+        amount: BalanceOf<T>,
+        refund: BalanceOf<T>,
+    ) -> DispatchResult {
+        ensure_signed(origin)?;
+        
+        // Verify the merkle root is valid (exists in recent roots)
+        ensure!(Self::is_valid_merkle_root(&root), Error::<T>::InvalidMerkleRoot);
+        
+        // Ensure nullifier hasn't been spent
+        ensure!(!Self::is_nullifier_used(&nullifier), Error::<T>::NullifierAlreadyUsed);
+        
+        // Verify the ZK proof
+        Self::verify_unshield_proof(&proof, &root, &nullifier, &recipient, amount, refund)?;
+        
+        // Mark nullifier as spent
+        <Nullifiers<T>>::insert(nullifier, true);
+        
+        // Queue the unshield request for processing after finality delay
+        let current_block = <frame_system::Pallet<T>>::block_number();
+        let process_block = current_block.saturating_add(T::FinalityDelay::get());
+        
+        <PendingUnshields<T>>::insert(
+            process_block,
+            UnshieldRequest {
+                nullifier,
+                recipient: recipient.clone(),
+                amount,
+            }
+        );
+        
+        // Emit unshield request event
+        Self::deposit_event(Event::UnshieldRequested { 
+            nullifier, 
+            recipient, 
+            amount, 
+            process_block 
+        });
+        
+        Ok(())
+    }
+}
+```
+
+3. Implement helper functions for the gateway operations:
+```rust
+impl<T: Config> Pallet<T> {
+    // Compute commitment from note
+    fn compute_commitment(note: &[u8]) -> Result<T::Hash, DispatchError> {
+        // Implementation using arkworks for commitment calculation
+        // ...
+    }
+    
+    // Verify unshield proof
+    fn verify_unshield_proof(
+        proof: &[u8],
+        root: &T::Hash,
+        nullifier: &T::Hash,
+        recipient: &T::AccountId,
+        amount: BalanceOf<T>,
+        refund: BalanceOf<T>,
+    ) -> DispatchResult {
+        // Use the ZK verification functions from Task 3
+        // ...
+    }
+    
+    // Check if merkle root is valid
+    fn is_valid_merkle_root(root: &T::Hash) -> bool {
+        <MerkleRoots<T>>::contains_key(root)
+    }
+    
+    // Check if nullifier has been used
+    fn is_nullifier_used(nullifier: &T::Hash) -> bool {
+        <Nullifiers<T>>::contains_key(nullifier) && <Nullifiers<T>>::get(nullifier).unwrap_or(false)
+    }
+    
+    // Insert commitment into the tree
+    fn insert_commitment(commitment: T::Hash) -> DispatchResult {
+        // Add commitment to the tree and update the merkle root
+        // ...
+    }
+}
+```
+
+4. Add storage items for gateway operations:
+```rust
+#[pallet::storage]
+pub type PendingUnshields<T: Config> = StorageMap<
+    _,
+    Blake2_128Concat,
+    T::BlockNumber,
+    UnshieldRequest<T::AccountId, BalanceOf<T>>,
+    OptionQuery,
+>;
+
+#[pallet::storage]
+pub type Nullifiers<T: Config> = StorageMap<
+    _,
+    Blake2_128Concat,
+    T::Hash,
+    bool,
+    OptionQuery,
+>;
+
+#[pallet::storage]
+pub type MerkleRoots<T: Config> = StorageMap<
+    _,
+    Blake2_128Concat,
+    T::Hash,
+    T::BlockNumber,
+    OptionQuery,
+>;
+```
+
+5. Define the UnshieldRequest struct:
+```rust
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+pub struct UnshieldRequest<AccountId, Balance> {
+    pub nullifier: H256,
+    pub recipient: AccountId,
+    pub amount: Balance,
+}
+```
+
+6. Add events for gateway operations:
+```rust
+#[pallet::event]
+#[pallet::generate_deposit(pub(super) fn deposit_event)]
+pub enum Event<T: Config> {
+    /// Tokens have been shielded (public → private)
+    Shielded {
+        from: T::AccountId,
+        amount: BalanceOf<T>,
+        commitment: T::Hash,
+    },
+    /// Unshield request has been submitted
+    UnshieldRequested {
+        nullifier: T::Hash,
+        recipient: T::AccountId,
+        amount: BalanceOf<T>,
+        process_block: T::BlockNumber,
+    },
+    /// Tokens have been unshielded (private → public)
+    Unshielded {
+        nullifier: T::Hash,
+        recipient: T::AccountId,
+        amount: BalanceOf<T>,
+    },
+}
+```
+
+7. Implement a separate function to process pending unshields after the finality delay:
+```rust
+#[pallet::hooks]
+impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+    fn on_finalize(n: T::BlockNumber) {
+        // Process any pending unshields that have reached their processing block
+        if let Some(request) = <PendingUnshields<T>>::take(n) {
+            // Transfer tokens from pallet account to recipient
+            let pallet_account = T::PalletId::get().into_account_truncating();
+            let _ = <pallet_balances::Pallet<T>>::transfer_keep_alive(
+                RawOrigin::Signed(pallet_account).into(),
+                request.recipient.clone(),
+                request.amount
+            );
+            
+            // Emit unshield completed event
+            Self::deposit_event(Event::Unshielded { 
+                nullifier: request.nullifier,
+                recipient: request.recipient,
+                amount: request.amount,
+            });
+        }
+    }
+}
+```
+
+8. Add necessary configuration traits:
+```rust
+#[pallet::config]
+pub trait Config: frame_system::Config + pallet_balances::Config {
+    type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+    type WeightInfo: WeightInfo;
+    type PalletId: Get<PalletId>;
+    type FinalityDelay: Get<Self::BlockNumber>;
+}
+```
+
+# Test Strategy:
+To verify the correct implementation of the native gateway functions in pallet-shielded-pool, follow these testing steps:
+
+1. Unit Tests:
+   - Create unit tests for each gateway function:
+   ```rust
+   #[test]
+   fn shield_should_work() {
+       new_test_ext().execute_with(|| {
+           // Arrange: Set up a test account with balance
+           let account = 1;
+           let initial_balance = 1000;
+           let shield_amount = 500;
+           let note = vec![0u8; NOTE_SIZE]; // Create a dummy note
+           
+           // Set up account with balance
+           Balances::make_free_balance_be(&account, initial_balance);
+           
+           // Act: Call shield function
+           assert_ok!(ShieldedPool::shield(Origin::signed(account), shield_amount, note.clone()));
+           
+           // Assert: Check balances and events
+           assert_eq!(Balances::free_balance(account), initial_balance - shield_amount);
+           assert_eq!(Balances::free_balance(ShieldedPool::account_id()), shield_amount);
+           
+           // Check commitment was added
+           let commitment = ShieldedPool::compute_commitment(&note).unwrap();
+           assert!(ShieldedPool::commitment_exists(&commitment));
+           
+           // Check event was emitted
+           System::assert_has_event(Event::ShieldedPool(crate::Event::Shielded { 
+               from: account, 
+               amount: shield_amount, 
+               commitment 
+           }));
+       });
+   }
+   
+   #[test]
+   fn unshield_request_should_work() {
+       new_test_ext().execute_with(|| {
+           // Arrange: Set up test data
+           let account = 1;
+           let amount = 500;
+           let refund = 0;
+           let root = H256::random();
+           let nullifier = H256::random();
+           
+           // Mock the proof verification to return success
+           MockProofVerifier::set_result(true);
+           
+           // Add the root to valid roots
+           ShieldedPool::add_merkle_root(root);
+           
+           // Act: Call unshield_request function
+           assert_ok!(ShieldedPool::unshield_request(
+               Origin::signed(account),
+               vec![0u8; 32], // Mock proof
+               root,
+               nullifier,
+               account,
+               amount,
+               refund
+           ));
+           
+           // Assert: Check nullifier is marked as used
+           assert!(ShieldedPool::is_nullifier_used(&nullifier));
+           
+           // Check pending unshield was created
+           let current_block = System::block_number();
+           let process_block = current_block + ShieldedPool::finality_delay();
+           assert!(ShieldedPool::pending_unshield_exists(process_block));
+           
+           // Check event was emitted
+           System::assert_has_event(Event::ShieldedPool(crate::Event::UnshieldRequested { 
+               nullifier, 
+               recipient: account, 
+               amount, 
+               process_block 
+           }));
+       });
+   }
+   
+   #[test]
+   fn process_pending_unshields_should_work() {
+       new_test_ext().execute_with(|| {
+           // Arrange: Set up test data
+           let account = 1;
+           let amount = 500;
+           let nullifier = H256::random();
+           
+           // Fund the pallet account
+           Balances::make_free_balance_be(&ShieldedPool::account_id(), amount);
+           
+           // Create a pending unshield
+           let current_block = System::block_number();
+           ShieldedPool::add_pending_unshield(current_block, UnshieldRequest {
+               nullifier,
+               recipient: account,
+               amount,
+           });
+           
+           // Act: Trigger on_finalize
+           ShieldedPool::on_finalize(current_block);
+           
+           // Assert: Check balances
+           assert_eq!(Balances::free_balance(account), amount);
+           assert_eq!(Balances::free_balance(ShieldedPool::account_id()), 0);
+           
+           // Check event was emitted
+           System::assert_has_event(Event::ShieldedPool(crate::Event::Unshielded { 
+               nullifier, 
+               recipient: account, 
+               amount 
+           }));
+       });
+   }
+   ```
+
+2. Integration Tests:
+   - Test the full flow from shield to unshield:
+   ```rust
+   #[test]
+   fn full_shield_unshield_flow_should_work() {
+       new_test_ext().execute_with(|| {
+           // Arrange: Set up a test account with balance
+           let account = 1;
+           let initial_balance = 1000;
+           let shield_amount = 500;
+           
+           // Set up account with balance
+           Balances::make_free_balance_be(&account, initial_balance);
+           
+           // Act 1: Shield tokens
+           let note = create_test_note(account, shield_amount);
+           assert_ok!(ShieldedPool::shield(Origin::signed(account), shield_amount, note.clone()));
+           
+           // Assert 1: Check shield worked
+           assert_eq!(Balances::free_balance(account), initial_balance - shield_amount);
+           
+           // Act 2: Create unshield request
+           let (proof, root, nullifier) = create_test_unshield_proof(&note, account, shield_amount);
+           assert_ok!(ShieldedPool::unshield_request(
+               Origin::signed(account),
+               proof,
+               root,
+               nullifier,
+               account,
+               shield_amount,
+               0
+           ));
+           
+           // Assert 2: Check unshield request was created
+           let current_block = System::block_number();
+           let process_block = current_block + ShieldedPool::finality_delay();
+           
+           // Act 3: Fast forward to processing block
+           run_to_block(process_block);
+           
+           // Assert 3: Check unshield was processed
+           assert_eq!(Balances::free_balance(account), initial_balance);
+       });
+   }
+   ```
+
+3. Error Case Tests:
+   ```rust
+   #[test]
+   fn shield_should_fail_with_insufficient_balance() {
+       new_test_ext().execute_with(|| {
+           let account = 1;
+           let initial_balance = 100;
+           let shield_amount = 500; // More than balance
+           let note = vec![0u8; NOTE_SIZE];
+           
+           Balances::make_free_balance_be(&account, initial_balance);
+           
+           assert_noop!(
+               ShieldedPool::shield(Origin::signed(account), shield_amount, note),
+               pallet_balances::Error::<Test>::InsufficientBalance
+           );
+       });
+   }
+   
+   #[test]
+   fn unshield_request_should_fail_with_invalid_root() {
+       new_test_ext().execute_with(|| {
+           let account = 1;
+           let amount = 500;
+           let root = H256::random(); // Root not in valid roots
+           let nullifier = H256::random();
+           
+           assert_noop!(
+               ShieldedPool::unshield_request(
+                   Origin::signed(account),
+                   vec![0u8; 32],
+                   root,
+                   nullifier,
+                   account,
+                   amount,
+                   0
+               ),
+               Error::<Test>::InvalidMerkleRoot
+           );
+       });
+   }
+   
+   #[test]
+   fn unshield_request_should_fail_with_used_nullifier() {
+       new_test_ext().execute_with(|| {
+           let account = 1;
+           let amount = 500;
+           let root = H256::random();
+           let nullifier = H256::random();
+           
+           // Add the root to valid roots
+           ShieldedPool::add_merkle_root(root);
+           
+           // Mark nullifier as used
+           ShieldedPool::mark_nullifier_used(nullifier);
+           
+           assert_noop!(
+               ShieldedPool::unshield_request(
+                   Origin::signed(account),
+                   vec![0u8; 32],
+                   root,
+                   nullifier,
+                   account,
+                   amount,
+                   0
+               ),
+               Error::<Test>::NullifierAlreadyUsed
+           );
+       });
+   }
+   ```
+
+4. Manual Testing:
+   - Deploy the pallet to a development network
+   - Use the Polkadot.js UI to:
+     - Create accounts and fund them with tokens
+     - Call the shield function with various amounts
+     - Create unshield requests
+     - Verify balances change correctly
+     - Check events are emitted properly
+     - Verify that after the finality delay, unshield requests are processed
+
+5. Security Testing:
+   - Verify that nullifiers cannot be reused
+   - Ensure that only valid merkle roots are accepted
+   - Check that the ZK proof verification is correctly integrated
+   - Test that the pallet account cannot be drained improperly
+   - Verify that the shield and unshield operations maintain the correct total supply
+
+6. Performance Testing:
+   - Measure the gas costs of shield and unshield operations
+   - Test with large numbers of concurrent operations
+   - Verify that the merkle tree operations scale efficiently

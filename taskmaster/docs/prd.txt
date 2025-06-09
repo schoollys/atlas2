@@ -1,0 +1,117 @@
+Product Requirements Document (PRD) for Atlas 2.0
+# Overview
+
+"Atlas 2.0" is an advanced, privacy-focused blockchain designed to bridge the gap between user confidentiality and regulatory compliance. It features a dual-ledger system: a private (shielded) pool for anonymous transactions and a public ledger for transparent, auditable interactions, primarily with centralized exchanges (CEX). The core philosophy is "Privacy by Default, Transparency by Choice".
+# Core Features
+
+    >>Dual-Ledger System<<: The blockchain maintains two distinct but interconnected ledgers within a single consensus mechanism.
+
+    >>Shielded Pool (Private):<< Utilizes ZK-SNARKs (PLONK/Halo2) for fully private peer-to-peer transactions. Transaction details (sender, receiver, amount) are encrypted. Based on a note-based UTXO model.
+
+    >>Public Ledger (Transparent):<< A standard account-based model (like Ethereum) for fully transparent transactions. Used for interactions with exchanges and other regulated entities.
+
+    >>Protocol-Integrated Gateway<<: A native state transition function (not a smart contract) that manages the movement of value between the private and public ledgers.
+
+        Shielding: Moving funds from the Public Ledger to the Shielded Pool.
+
+        Unshielding: Moving funds from the Shielded Pool to the Public Ledger. This process must be auditable.
+
+    >>Aura-R DPoS Consensus<<: A Randomized Delegated Proof-of-Stake mechanism for high throughput, fast finality, and censorship resistance. It uses a large candidate pool and a smaller, randomly selected active set of validators for each epoch.
+
+    >>WASM-based Execution Environment (AVM):<< Supports smart contracts written in languages like Rust, compilable to WebAssembly.
+
+# User Experience & Flow
+
+    >>Target User<<: Individuals seeking financial privacy for daily transactions, and developers building privacy-preserving applications (PriFi).
+
+    >>User Flow (CEX Deposit):<<
+
+        User receives a public deposit address (apub...) from an exchange like Binance.
+
+        User opens their Aura Wallet.
+
+        User initiates a "Send" transaction to the exchange's apub... address from their unified balance.
+
+        The wallet automatically detects the public destination and constructs an unshield transaction.
+
+        The transaction is processed by the network's Gateway Protocol.
+
+        The exchange receives a standard, transparent transaction on its public address.
+
+# Technical Architecture
+
+    >>Backend/Protocol<<: Built using the Substrate framework in Rust.
+
+    >>Consensus Components<<:
+
+        pallet-babe for randomness (VRF).
+
+        pallet-aura for block production.
+
+        pallet-grandpa for finality.
+
+        Custom pallet-staking-atlas for Aura-R DPoS logic.
+
+    >>Ledger Components<<:
+
+        pallet-balances for the Public Ledger.
+
+        Custom pallet-shielded-pool for the Shielded Pool and Gateway logic, using arkworks-rs or Halo2 for ZK-SNARK verification.
+
+    >>Client-Side Components<<:
+
+        Aura Wallet: A desktop application built with Tauri (Rust backend, Svelte/React frontend).
+
+        ZK Prover: The ZK-SNARK proving system will be compiled to WASM and run locally within the Aura Wallet.
+
+    >>Data Model<<:
+
+        Shielded Pool: Note-based UTXO model. Each note contains (amount, owner_address, salt). Commitments are stored in a Merkle Tree.
+
+        Public Ledger: Account-based model (address -> balance).
+
+# Development Roadmap (MVP v1.0)
+
+    Goal for v1 (demo-ready): A stable testnet demonstrating the core functionality of the dual-ledger system and the gateway.
+
+    Basic blockchain node with Aura-R DPoS consensus.
+
+    Public Ledger functionality (simple transfers between apub addresses).
+
+    Shielded Pool functionality (private transfers between apriv addresses).
+
+    Gateway Protocol for shield and unshield operations (MVP version can be non-batched).
+
+    CLI Wallet for performing all core operations.
+
+    Basic Block Explorer showing public transactions and metadata of private ones.
+
+# Logical Dependency Chain
+
+    Create basic Substrate node structure and pallet-staking-atlas for Aura-R DPoS.
+
+    Implement pallet-balances for the Public Ledger.
+
+    Design and implement ZK-circuits for private_transfer and unshield using arkworks-rs.
+
+    Implement pallet-shielded-pool with ZK-proof verification and state updates (nullifiers, commitments).
+
+    Implement the native Gateway functions (shield, unshield_request) within pallet-shielded-pool.
+
+    Develop a CLI wallet capable of generating keys, creating proofs, and signing all transaction types.
+
+    Implement the Unshielding Pool and batch processing logic.
+
+    Develop the Tauri-based Aura Wallet with a user-friendly interface.
+
+    Add progressive difficulty increase (e.g., transaction fee adjustments based on network load).
+
+    Polish visuals and user feedback in the wallet and block explorer.
+
+# Risks and Mitigations
+
+    >>Performance Issues<<: ZK-proof verification is computationally intensive. Mitigation: Use efficient proof systems (PLONK/Halo2) and perform thorough benchmarking to set appropriate transaction weights.
+
+    >>Security Vulnerabilities<<: Bugs in ZK-circuits or protocol logic can be catastrophic. Mitigation: Extensive unit/integration testing, formal verification of critical components, and multiple external security audits.
+
+    >>UX Complexity<<: The dual-ledger concept can be confusing. Mitigation: The Aura Wallet must abstract away all complexity, presenting a single unified balance and "smart send" functionality. 

@@ -1,0 +1,294 @@
+# Task ID: 8
+# Title: Develop Tauri-based Aura Wallet with User-friendly Interface
+# Status: pending
+# Dependencies: 6, 3, 4, 5
+# Priority: medium
+# Description: Create a desktop wallet application using Tauri framework with a user-friendly interface that supports key generation, proof creation, transaction signing, and account management for both public and private operations.
+# Details:
+This task involves developing a desktop wallet application using Tauri (Rust + Web technologies) to provide users with a graphical interface for interacting with the Aura blockchain:
+
+1. Set up the Tauri project structure:
+```bash
+# Install Tauri CLI
+npm install -g @tauri-apps/cli
+
+# Create a new Tauri project
+npx create-tauri-app aura-wallet
+cd aura-wallet
+```
+
+2. Configure the frontend framework (React/Vue/Svelte):
+```bash
+# If using React
+npm install react react-dom
+npm install -D @types/react @types/react-dom
+
+# Add required UI libraries
+npm install @mantine/core @mantine/hooks @emotion/react
+```
+
+3. Implement the core wallet functionality by integrating with the CLI wallet codebase:
+```rust
+// src-tauri/src/wallet.rs
+use atlas_cli_wallet::{
+    key_management::{generate_keys, derive_viewing_key},
+    transaction::{create_shield_tx, create_private_transfer_tx, create_unshield_tx},
+    proof_generation::{generate_private_transfer_proof, generate_unshield_proof}
+};
+
+// Expose wallet functions to the frontend
+#[tauri::command]
+fn generate_wallet() -> Result<WalletKeys, String> {
+    let keys = generate_keys()?;
+    Ok(WalletKeys {
+        spending_key: keys.spending_key.to_string(),
+        viewing_key: keys.viewing_key.to_string(),
+        public_address: keys.public_address.to_string(),
+    })
+}
+
+#[tauri::command]
+fn create_shield_transaction(amount: u128, recipient_note: String) -> Result<Transaction, String> {
+    // Implementation details
+}
+
+// Additional wallet functions exposed as Tauri commands
+```
+
+4. Design and implement the user interface with the following components:
+   - Account creation and import screens
+   - Dashboard showing balances (public and private)
+   - Transaction history view
+   - Send/receive transaction forms
+   - Shield/unshield operation forms
+   - Settings page for network configuration
+
+5. Implement the main dashboard layout:
+```jsx
+// src/components/Dashboard.jsx
+import React, { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/tauri';
+import { Box, Tabs, Group, Text } from '@mantine/core';
+
+export function Dashboard() {
+  const [publicBalance, setPublicBalance] = useState('0');
+  const [privateBalance, setPrivateBalance] = useState('0');
+  
+  useEffect(() => {
+    // Fetch balances from the Tauri backend
+    async function fetchBalances() {
+      const public = await invoke('get_public_balance');
+      const private = await invoke('get_private_balance');
+      setPublicBalance(public);
+      setPrivateBalance(private);
+    }
+    
+    fetchBalances();
+    const interval = setInterval(fetchBalances, 30000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  return (
+    <Box p="md">
+      <Group position="apart" mb="xl">
+        <Box>
+          <Text size="sm" color="dimmed">Public Balance</Text>
+          <Text size="xl" weight={700}>{publicBalance} AURA</Text>
+        </Box>
+        <Box>
+          <Text size="sm" color="dimmed">Private Balance</Text>
+          <Text size="xl" weight={700}>{privateBalance} AURA</Text>
+        </Box>
+      </Group>
+      
+      <Tabs defaultValue="transactions">
+        <Tabs.List>
+          <Tabs.Tab value="transactions">Transactions</Tabs.Tab>
+          <Tabs.Tab value="send">Send</Tabs.Tab>
+          <Tabs.Tab value="receive">Receive</Tabs.Tab>
+          <Tabs.Tab value="shield">Shield/Unshield</Tabs.Tab>
+        </Tabs.List>
+        
+        <Tabs.Panel value="transactions" pt="md">
+          {/* Transaction history component */}
+        </Tabs.Panel>
+        
+        <Tabs.Panel value="send" pt="md">
+          {/* Send form component */}
+        </Tabs.Panel>
+        
+        {/* Other tab panels */}
+      </Tabs>
+    </Box>
+  );
+}
+```
+
+6. Implement the transaction forms for different operations:
+   - Public transfer form
+   - Private transfer form
+   - Shield form
+   - Unshield form
+
+7. Add secure key storage using the system's secure storage:
+```rust
+// src-tauri/src/storage.rs
+use keyring::Entry;
+
+pub fn save_keys(wallet_name: &str, spending_key: &str) -> Result<(), String> {
+    let entry = Entry::new("aura-wallet", wallet_name).map_err(|e| e.to_string())?;
+    entry.set_password(spending_key).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn load_keys(wallet_name: &str) -> Result<String, String> {
+    let entry = Entry::new("aura-wallet", wallet_name).map_err(|e| e.to_string())?;
+    entry.get_password().map_err(|e| e.to_string())
+}
+```
+
+8. Implement network connectivity and blockchain interaction:
+   - Connection to RPC endpoints
+   - Subscription to new blocks
+   - Transaction submission
+   - Balance updates
+
+9. Add error handling and user notifications:
+```jsx
+// src/components/Notifications.jsx
+import { showNotification } from '@mantine/notifications';
+
+export function notifySuccess(message) {
+  showNotification({
+    title: 'Success',
+    message,
+    color: 'green',
+  });
+}
+
+export function notifyError(error) {
+  showNotification({
+    title: 'Error',
+    message: error.toString(),
+    color: 'red',
+  });
+}
+```
+
+10. Package the application for distribution:
+```bash
+# Build for production
+npm run tauri build
+```
+
+# Test Strategy:
+To verify the correct implementation and functionality of the Tauri-based Aura Wallet:
+
+1. Unit Testing:
+   - Create unit tests for all wallet functions using Rust's testing framework:
+   ```rust
+   #[cfg(test)]
+   mod tests {
+       use super::*;
+       
+       #[test]
+       fn test_generate_wallet() {
+           let result = generate_wallet();
+           assert!(result.is_ok());
+           let keys = result.unwrap();
+           assert!(!keys.spending_key.is_empty());
+           assert!(!keys.viewing_key.is_empty());
+           assert!(!keys.public_address.is_empty());
+       }
+       
+       // Additional unit tests for other wallet functions
+   }
+   ```
+   
+   - Create unit tests for React components using Jest and React Testing Library:
+   ```jsx
+   // src/__tests__/Dashboard.test.jsx
+   import { render, screen } from '@testing-library/react';
+   import { Dashboard } from '../components/Dashboard';
+   
+   test('renders dashboard with balance sections', () => {
+     render(<Dashboard />);
+     expect(screen.getByText(/Public Balance/i)).toBeInTheDocument();
+     expect(screen.getByText(/Private Balance/i)).toBeInTheDocument();
+   });
+   ```
+
+2. Integration Testing:
+   - Test the integration between the Tauri backend and the frontend:
+   ```jsx
+   // Mock the Tauri invoke function for testing
+   jest.mock('@tauri-apps/api/tauri', () => ({
+     invoke: jest.fn().mockImplementation((command) => {
+       if (command === 'get_public_balance') return Promise.resolve('100');
+       if (command === 'get_private_balance') return Promise.resolve('50');
+       return Promise.resolve(null);
+     })
+   }));
+   
+   test('fetches and displays balances', async () => {
+     render(<Dashboard />);
+     // Wait for the async operations to complete
+     await screen.findByText('100 AURA');
+     expect(screen.getByText('50 AURA')).toBeInTheDocument();
+   });
+   ```
+
+3. End-to-End Testing:
+   - Use Playwright or Cypress to test the complete user flows:
+   ```javascript
+   // tests/e2e/wallet.spec.js
+   test('create new wallet and view dashboard', async ({ page }) => {
+     await page.goto('tauri://localhost');
+     await page.click('text=Create New Wallet');
+     await page.fill('input[name="walletName"]', 'TestWallet');
+     await page.fill('input[name="password"]', 'SecurePassword123');
+     await page.fill('input[name="confirmPassword"]', 'SecurePassword123');
+     await page.click('button[type="submit"]');
+     
+     // Verify we're on the dashboard
+     await expect(page.locator('text=Public Balance')).toBeVisible();
+     await expect(page.locator('text=Private Balance')).toBeVisible();
+   });
+   
+   test('shield tokens flow', async ({ page }) => {
+     // Login and navigate to shield tab
+     // Fill shield form and submit
+     // Verify success notification
+   });
+   ```
+
+4. Manual Testing Checklist:
+   - Verify wallet creation and recovery using mnemonic phrases
+   - Test public transfers between accounts
+   - Test shielding tokens from public to private balance
+   - Test private transfers between accounts
+   - Test unshielding tokens from private to public balance
+   - Verify transaction history displays correctly
+   - Test error handling for insufficient funds
+   - Test error handling for invalid addresses
+   - Verify balance updates after transactions
+   - Test application behavior when offline
+   - Verify secure storage of keys
+
+5. Security Testing:
+   - Perform security audit of key storage implementation
+   - Verify that private keys are never exposed in logs or UI
+   - Test application behavior when attempting to access protected functions
+   - Verify proper input validation for all user inputs
+   - Test against common attack vectors (XSS, injection)
+
+6. Performance Testing:
+   - Measure application startup time
+   - Measure time to generate proofs for different transaction types
+   - Test application behavior with large transaction history
+   - Monitor memory usage during extended usage
+
+7. Cross-platform Testing:
+   - Test the application on Windows, macOS, and Linux
+   - Verify consistent behavior across all supported platforms
+   - Test installation process on each platform

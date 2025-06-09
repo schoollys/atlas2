@@ -1,0 +1,229 @@
+# Task ID: 1
+# Title: Set Up Basic Substrate Node Structure with pallet-staking-atlas for Aura-R DPoS
+# Status: pending
+# Dependencies: None
+# Priority: medium
+# Description: Establish the foundational Substrate node architecture and implement the pallet-staking-atlas module to support Aura-R Delegated Proof of Stake (DPoS) consensus mechanism as specified in the PRD.
+# Details:
+This task involves setting up the core Substrate node structure and implementing the pallet-staking-atlas module for Aura-R DPoS:
+
+1. Initialize a new Substrate node project using the Substrate Node Template:
+   ```bash
+   cargo install subkey --force
+   cargo install substrate-node-template --force
+   substrate-node-template new my-aura-r-node
+   cd my-aura-r-node
+   ```
+
+2. Configure the runtime to include necessary dependencies in Cargo.toml:
+   ```toml
+   [dependencies]
+   # Substrate dependencies
+   pallet-staking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.x" }
+   pallet-session = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.x" }
+   pallet-aura = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.x" }
+   # Custom pallet for Aura-R DPoS
+   pallet-staking-atlas = { path = "../pallets/staking-atlas", default-features = false, version = "1.0.0" }
+   ```
+
+3. Create the pallet-staking-atlas directory structure:
+   ```bash
+   mkdir -p pallets/staking-atlas/src
+   touch pallets/staking-atlas/Cargo.toml
+   touch pallets/staking-atlas/src/lib.rs
+   ```
+
+4. Implement the pallet-staking-atlas module with the following core components:
+   - Validator selection mechanism based on stake
+   - Delegation functionality for token holders
+   - Reward distribution system
+   - Slashing conditions for misbehavior
+   - Era transition logic
+
+5. Implement the Aura-R DPoS consensus mechanism by extending the standard Aura consensus with reputation-based validator selection:
+   - Define reputation metrics based on validator performance
+   - Implement reputation score calculation
+   - Integrate reputation scores with validator selection
+
+6. Configure the node's chain specification to use the Aura-R DPoS consensus:
+   - Set initial validators
+   - Define staking parameters (minimum stake, reward rate, etc.)
+   - Configure era duration and session length
+
+7. Integrate the pallet-staking-atlas with the runtime by adding it to the construct_runtime! macro and implementing its Config trait.
+
+8. Implement necessary RPC methods to query staking information, validator set, and delegation status.
+
+9. Document the architecture and configuration options for the staking module.
+
+# Test Strategy:
+1. Unit Testing:
+   - Write comprehensive unit tests for all functions in the pallet-staking-atlas module
+   - Test validator selection logic with various stake distributions
+   - Test delegation mechanics and reward calculations
+   - Test slashing mechanisms under different violation scenarios
+   - Test reputation score calculations with simulated validator behaviors
+
+2. Integration Testing:
+   - Create a test runtime that includes the pallet-staking-atlas
+   - Test interactions between staking, session, and consensus modules
+   - Verify correct validator set updates at session boundaries
+   - Test era transitions and reward distributions
+
+3. Runtime Verification:
+   - Deploy a local testnet with multiple nodes
+   - Configure nodes with different stake amounts and reputation scores
+   - Verify validator selection matches expected outcomes based on stake and reputation
+   - Test network behavior during validator rotation
+
+4. Performance Testing:
+   - Benchmark validator selection algorithm efficiency
+   - Measure block production times with various validator set sizes
+   - Test system under high transaction load to ensure consensus stability
+
+5. Security Testing:
+   - Attempt to exploit the staking system with malicious inputs
+   - Test slashing conditions to ensure they trigger appropriately
+   - Verify that validators cannot manipulate reputation scores
+
+6. Acceptance Criteria:
+   - The node successfully builds and runs with the pallet-staking-atlas module
+   - Validators are selected according to the Aura-R DPoS rules specified in the PRD
+   - Delegations properly affect validator selection
+   - Rewards are distributed correctly at the end of each era
+   - Reputation scores accurately reflect validator performance
+   - The system maintains consensus during validator set changes
+
+# Subtasks:
+## 1. Initialize Substrate Node Project and Configure Dependencies [done]
+### Dependencies: None
+### Description: Set up a new Substrate node project using the Substrate Node Template and configure all necessary dependencies in Cargo.toml files for both the node and the custom pallet.
+### Details:
+1. Install required tools with `cargo install subkey --force` and `cargo install substrate-node-template --force`
+2. Create a new node project with `substrate-node-template new my-aura-r-node`
+3. Navigate to the project directory
+4. Update the runtime's Cargo.toml to include dependencies for pallet-staking, pallet-session, and pallet-aura
+5. Create the directory structure for the custom pallet-staking-atlas
+6. Configure the custom pallet's Cargo.toml with appropriate dependencies and features
+
+## 2. Implement Core pallet-staking-atlas Module Structure [done]
+### Dependencies: 1.1
+### Description: Create the foundational structure for the pallet-staking-atlas module, including storage items, events, errors, and basic types needed for the Aura-R DPoS system.
+### Details:
+1. Define the Config trait with necessary associated types
+2. Implement storage items for validators, delegators, stakes, and reputation scores
+3. Define events for actions like staking, unstaking, delegating, and reward distribution
+4. Create error types for validation failures and other error conditions
+5. Implement basic pallet structure with genesis configuration
+6. Define the core types needed (Validator, Delegator, Stake, ReputationScore)
+7. Implement the pallet's hooks for initialization and finalization
+<info added on 2025-06-09T14:00:14.285Z>
+We have started implementing the core structure of the pallet-staking-atlas module. The basic directory and file structure has been created:
+
+1. Directory structure for the project:
+   ```
+   atlas2/
+   └── node/
+       ├── Cargo.toml (configured dependencies for the main node)
+       └── src/
+           ├── main.rs (basic structure for the node entry point)
+           └── pallets/
+               ├── staking-atlas/
+               │   ├── Cargo.toml (configured dependencies for the staking-atlas pallet)
+               │   └── src/
+               │       └── lib.rs (defined core data types and structures)
+               ├── balances/
+               │   ├── Cargo.toml
+               │   └── src/
+               │       └── lib.rs (extension of standard pallet-balances for public ledger)
+               └── shielded-pool/
+                   ├── Cargo.toml
+                   └── src/
+                       └── lib.rs (implementation of private transactions using ZK-SNARKs)
+   ```
+
+2. In lib.rs for pallet-staking-atlas, we have defined:
+   - ReputationScore and Validator types for storing validator information and reputation
+   - Delegator type for managing delegations
+   - Config structure for pallet configuration
+   - Basic pallet structure using the #[frame_support::pallet] macro
+
+3. The staking-atlas pallet depends on the following Substrate components:
+   - frame-support and frame-system for core pallet functionality
+   - pallet-session for validator session management
+   - pallet-staking as the base staking implementation
+
+Next steps will be:
+1. Implementing storage structures for validators, delegators, and stakes
+2. Defining events for staking actions
+3. Defining error types
+4. Implementing initialization and finalization hooks
+</info added on 2025-06-09T14:00:14.285Z>
+
+## 3. Implement Validator Selection and Delegation Logic [in-progress]
+### Dependencies: 1.2
+### Description: Develop the core functionality for validator selection based on stake and reputation, along with the delegation system allowing token holders to delegate to validators.
+### Details:
+1. Implement validator registration and deregistration functions
+2. Create delegation and undelegation mechanisms
+3. Develop the reputation score calculation algorithm based on validator performance
+4. Implement the validator selection algorithm that combines stake and reputation
+5. Create functions to query current validators and their delegations
+6. Implement stake locking and unlocking mechanisms with appropriate timeframes
+7. Add validation logic to ensure minimum stake requirements and other constraints
+<info added on 2025-06-09T14:02:39.092Z>
+We have already started implementing validator selection and delegation logic for pallet-staking-atlas:
+
+1. Core dispatchable functions implemented:
+   - register_validator: allows an account to register as a validator with specified stake
+   - deregister_validator: allows a validator to cancel their registration
+   - delegate: allows an account to delegate tokens to a chosen validator
+
+2. Main components implemented so far:
+   - Validator state storage in storage::Validators
+   - Delegator state storage in storage::Delegators
+   - Management of validator and delegator stakes
+   - Token locking during staking and delegation
+   - Validator status management through ValidatorStatuses
+
+3. Events defined that are generated when:
+   - a validator registers (ValidatorRegistered)
+   - a validator deregisters (ValidatorDeregistered)
+   - a delegation is created (DelegationCreated)
+   - stake changes (ValidatorStakeIncreased, ValidatorStakeDecreased)
+   - reputation score updates (ReputationUpdated)
+
+Next steps to complete this subtask:
+1. Implement the undelegation function (undelegate)
+2. Implement functions to change stake size (increase_stake, decrease_stake)
+3. Implement validator selection algorithm based on stake and reputation
+4. Develop validator reputation calculation mechanism
+5. Implement methods to query information about current validators and delegations
+</info added on 2025-06-09T14:02:39.092Z>
+
+## 4. Implement Reward Distribution and Slashing Mechanisms [pending]
+### Dependencies: 1.3
+### Description: Create the reward distribution system for validators and delegators, along with slashing conditions for misbehavior in the Aura-R DPoS consensus.
+### Details:
+1. Implement era transition logic to trigger reward calculations
+2. Develop the reward distribution algorithm that accounts for validator performance
+3. Create functions to calculate and distribute rewards to validators and their delegators
+4. Implement slashing conditions for offline validators or other misbehavior
+5. Add reputation adjustment logic based on validator performance
+6. Create mechanisms to report validator misbehavior
+7. Implement proportional slashing that affects both validators and their delegators
+
+## 5. Integrate pallet-staking-atlas with Runtime and Configure Consensus [pending]
+### Dependencies: 1.4
+### Description: Integrate the custom pallet with the Substrate runtime, configure the chain specification for Aura-R DPoS, and implement necessary RPC methods.
+### Details:
+1. Add pallet-staking-atlas to the construct_runtime! macro in the runtime
+2. Implement the Config trait for the pallet in the runtime
+3. Configure the chain specification with initial validators and staking parameters
+4. Set up era duration and session length in the runtime
+5. Implement RPC methods to query staking information, validator set, and delegation status
+6. Connect the pallet-staking-atlas with pallet-session for validator set management
+7. Configure pallet-aura to work with the custom validator selection
+8. Create comprehensive documentation for the architecture and configuration options
+9. Implement a basic CLI interface for staking operations
+

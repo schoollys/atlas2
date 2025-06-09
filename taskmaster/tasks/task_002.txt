@@ -1,0 +1,234 @@
+# Task ID: 2
+# Title: Implement pallet-balances for the Public Ledger
+# Status: pending
+# Dependencies: 1
+# Priority: medium
+# Description: Integrate and configure the pallet-balances module into the Substrate node to handle token balances, transfers, and account management for the Public Ledger as specified in the PRD.
+# Details:
+This task involves implementing the pallet-balances module to manage token balances on the Public Ledger:
+
+1. Add pallet-balances as a dependency in the runtime's Cargo.toml:
+   ```rust
+   [dependencies]
+   pallet-balances = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.37" }
+   ```
+
+2. Configure the runtime to include pallet-balances in lib.rs:
+   ```rust
+   parameter_types! {
+       pub const ExistentialDeposit: u128 = 1;
+       pub const MaxLocks: u32 = 50;
+       pub const MaxReserves: u32 = 50;
+   }
+
+   impl pallet_balances::Config for Runtime {
+       type MaxLocks = MaxLocks;
+       type MaxReserves = MaxReserves;
+       type ReserveIdentifier = [u8; 8];
+       type Balance = Balance;
+       type DustRemoval = ();
+       type RuntimeEvent = RuntimeEvent;
+       type ExistentialDeposit = ExistentialDeposit;
+       type AccountStore = System;
+       type WeightInfo = pallet_balances::weights::SubstrateWeight<Runtime>;
+   }
+   ```
+
+3. Add pallet-balances to the runtime construction in lib.rs:
+   ```rust
+   construct_runtime!(
+       pub enum Runtime where
+           Block = Block,
+           NodeBlock = opaque::Block,
+           UncheckedExtrinsic = UncheckedExtrinsic
+       {
+           System: frame_system,
+           Balances: pallet_balances,
+           // ... other pallets
+       }
+   );
+   ```
+
+4. Define the Balance type in the runtime:
+   ```rust
+   pub type Balance = u128;
+   ```
+
+5. Configure Genesis state for initial balances in chain_spec.rs:
+   ```rust
+   fn testnet_genesis(
+       // ... other parameters
+   ) -> GenesisConfig {
+       GenesisConfig {
+           // ... other configurations
+           balances: BalancesConfig {
+               balances: endowed_accounts
+                   .iter()
+                   .cloned()
+                   .map(|k| (k, 1_000_000_000_000))
+                   .collect(),
+           },
+       }
+   }
+   ```
+
+6. Implement any custom balance-related functionality required by the PRD:
+   - Configure minimum balance requirements
+   - Set up transfer fees
+   - Implement any token economics specified in the PRD
+
+7. Update the runtime API to expose balance-related queries and functionality.
+
+8. Ensure proper integration with the existing pallet-staking-atlas to handle staking balances and rewards.
+
+9. Implement any custom events or hooks required for balance operations as specified in the PRD.
+
+10. Document the balance system configuration and any custom implementations.
+
+# Test Strategy:
+To verify the correct implementation of pallet-balances:
+
+1. Unit Tests:
+   - Write unit tests for custom balance functionality
+   - Test balance transfers between accounts
+   - Test minimum balance requirements
+   - Test account creation and deletion based on existential deposit
+
+2. Integration Tests:
+   - Test the interaction between pallet-balances and pallet-staking-atlas
+   - Verify staking rewards are correctly credited to accounts
+   - Test balance locking during staking operations
+
+3. Manual Testing:
+   - Deploy the node to a local testnet
+   - Use the Polkadot.js UI to:
+     - Create new accounts and check initial balances
+     - Transfer tokens between accounts
+     - Verify balance updates after transactions
+     - Test minimum balance requirements
+     - Test account existence based on balance
+
+4. RPC Testing:
+   - Test balance query endpoints
+   - Verify account information retrieval
+   - Test transaction fee calculations
+
+5. Performance Testing:
+   - Benchmark balance transfer operations
+   - Test system performance under high transaction volume
+   - Verify gas/weight calculations for balance operations
+
+6. Validation against PRD:
+   - Confirm all balance-related requirements in the PRD are implemented
+   - Verify token economics match the specifications
+   - Ensure any custom balance functionality works as described
+
+7. Security Testing:
+   - Test for potential overflow/underflow in balance calculations
+   - Verify proper access controls for privileged operations
+   - Test edge cases like maximum token supply
+
+# Subtasks:
+## 1. Add pallet-balances dependency and define Balance type [pending]
+### Dependencies: None
+### Description: Add the pallet-balances module as a dependency in the runtime's Cargo.toml file and define the Balance type in the runtime.
+### Details:
+1. Add pallet-balances to the runtime's Cargo.toml with the correct version and features:
+```rust
+[dependencies]
+pallet-balances = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.37" }
+```
+2. Define the Balance type in the runtime's lib.rs:
+```rust
+pub type Balance = u128;
+```
+3. Ensure the runtime's feature flags include pallet-balances in the std feature set.
+
+## 2. Configure pallet-balances in the runtime [pending]
+### Dependencies: 2.1
+### Description: Set up the configuration parameters for pallet-balances and implement the Config trait for the Runtime.
+### Details:
+1. Define parameter types for pallet-balances in lib.rs:
+```rust
+parameter_types! {
+    pub const ExistentialDeposit: u128 = 1;
+    pub const MaxLocks: u32 = 50;
+    pub const MaxReserves: u32 = 50;
+}
+```
+2. Implement the pallet_balances::Config trait for Runtime:
+```rust
+impl pallet_balances::Config for Runtime {
+    type MaxLocks = MaxLocks;
+    type MaxReserves = MaxReserves;
+    type ReserveIdentifier = [u8; 8];
+    type Balance = Balance;
+    type DustRemoval = ();
+    type RuntimeEvent = RuntimeEvent;
+    type ExistentialDeposit = ExistentialDeposit;
+    type AccountStore = System;
+    type WeightInfo = pallet_balances::weights::SubstrateWeight<Runtime>;
+}
+```
+3. Adjust parameters according to the PRD requirements, particularly ExistentialDeposit.
+
+## 3. Add pallet-balances to the runtime construction [pending]
+### Dependencies: 2.2
+### Description: Include pallet-balances in the runtime construction macro and ensure it's properly integrated with other pallets.
+### Details:
+1. Add the Balances pallet to the construct_runtime! macro in lib.rs:
+```rust
+construct_runtime!(
+    pub enum Runtime where
+        Block = Block,
+        NodeBlock = opaque::Block,
+        UncheckedExtrinsic = UncheckedExtrinsic
+    {
+        System: frame_system,
+        Balances: pallet_balances,
+        // ... other pallets
+    }
+);
+```
+2. Ensure the ordering of pallets follows Substrate best practices (System first, then Balances, etc.)
+3. Check for any dependencies between pallets that might require specific ordering.
+
+## 4. Configure Genesis state for initial balances [pending]
+### Dependencies: 2.3
+### Description: Set up the initial token distribution by configuring the Genesis state for balances in the chain specification.
+### Details:
+1. Update the chain_spec.rs file to include BalancesConfig in the GenesisConfig:
+```rust
+fn testnet_genesis(
+    // ... other parameters
+) -> GenesisConfig {
+    GenesisConfig {
+        // ... other configurations
+        balances: BalancesConfig {
+            balances: endowed_accounts
+                .iter()
+                .cloned()
+                .map(|k| (k, 1_000_000_000_000))
+                .collect(),
+        },
+    }
+}
+```
+2. Define the initial token allocation according to the PRD specifications
+3. Ensure all genesis accounts have at least the ExistentialDeposit amount
+4. Update any related functions that generate development or testnet configurations
+
+## 5. Integrate with pallet-staking-atlas and implement custom functionality [pending]
+### Dependencies: 2.4
+### Description: Ensure proper integration between pallet-balances and pallet-staking-atlas, and implement any custom balance-related functionality required by the PRD.
+### Details:
+1. Review the integration points between pallet-balances and pallet-staking-atlas
+2. Implement any custom hooks or callbacks required for staking operations
+3. Configure transfer fees and minimum balance requirements as specified in the PRD
+4. Implement any custom events for balance operations required by the PRD
+5. Update the runtime API to expose balance-related queries:
+   - Add any custom RPC methods needed for balance operations
+   - Ensure existing APIs work with the new balance system
+6. Document the balance system configuration and any custom implementations in the codebase
+7. Create integration tests that verify the interaction between balances and staking
+

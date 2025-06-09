@@ -1,0 +1,300 @@
+# Task ID: 4
+# Title: Implement pallet-shielded-pool with ZK-proof Verification and State Updates
+# Status: pending
+# Dependencies: 2, 3
+# Priority: medium
+# Description: Develop and integrate the pallet-shielded-pool module to handle private transactions, including ZK-proof verification and management of shielded state (nullifiers and commitments) as specified in the PRD.
+# Details:
+This task involves implementing the pallet-shielded-pool to enable privacy-preserving transactions:
+
+1. Create the basic pallet structure:
+```rust
+#[frame_support::pallet]
+pub mod pallet {
+    use frame_support::pallet_prelude::*;
+    use frame_system::pallet_prelude::*;
+    use sp_std::vec::Vec;
+    use ark_bn254::{Bn254, Fr};
+    
+    #[pallet::pallet]
+    #[pallet::generate_store(pub(super) trait Store)]
+    pub struct Pallet<T>(_);
+    
+    #[pallet::config]
+    pub trait Config: frame_system::Config + pallet_balances::Config {
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        type Currency: Currency<Self::AccountId>;
+        // Additional configuration parameters
+    }
+}
+```
+
+2. Define the storage items for the shielded pool:
+```rust
+#[pallet::storage]
+pub type Nullifiers<T> = StorageMap<_, Blake2_128Concat, [u8; 32], bool, ValueQuery>;
+
+#[pallet::storage]
+pub type Commitments<T> = StorageMap<_, Blake2_128Concat, [u8; 32], (), ValueQuery>;
+
+#[pallet::storage]
+pub type MerkleTree<T> = StorageValue<_, Vec<[u8; 32]>, ValueQuery>;
+```
+
+3. Implement the extrinsic calls for the shielded pool operations:
+```rust
+#[pallet::call]
+impl<T: Config> Pallet<T> {
+    #[pallet::weight(10_000)]
+    pub fn shield(
+        origin: OriginFor<T>,
+        amount: BalanceOf<T>,
+        commitment: [u8; 32],
+        proof: Vec<u8>,
+    ) -> DispatchResult {
+        let sender = ensure_signed(origin)?;
+        
+        // Verify the proof is valid for the shield operation
+        ensure!(Self::verify_shield_proof(&proof, &commitment, amount), Error::<T>::InvalidProof);
+        
+        // Transfer funds from public to shielded pool
+        T::Currency::transfer(&sender, &Self::account_id(), amount, ExistenceRequirement::KeepAlive)?;
+        
+        // Add commitment to the storage
+        Commitments::<T>::insert(commitment, ());
+        
+        // Update the Merkle tree
+        Self::update_merkle_tree(commitment)?;
+        
+        Self::deposit_event(Event::Shielded(sender, amount, commitment));
+        Ok(())
+    }
+    
+    #[pallet::weight(10_000)]
+    pub fn private_transfer(
+        origin: OriginFor<T>,
+        nullifier: [u8; 32],
+        new_commitment: [u8; 32],
+        proof: Vec<u8>,
+    ) -> DispatchResult {
+        ensure_signed(origin)?;
+        
+        // Ensure nullifier hasn't been spent
+        ensure!(!Nullifiers::<T>::contains_key(nullifier), Error::<T>::NullifierAlreadyUsed);
+        
+        // Verify the proof is valid for the private transfer
+        ensure!(Self::verify_transfer_proof(&proof, &nullifier, &new_commitment), Error::<T>::InvalidProof);
+        
+        // Mark nullifier as spent
+        Nullifiers::<T>::insert(nullifier, true);
+        
+        // Add new commitment
+        Commitments::<T>::insert(new_commitment, ());
+        
+        // Update the Merkle tree
+        Self::update_merkle_tree(new_commitment)?;
+        
+        Self::deposit_event(Event::PrivateTransfer(nullifier, new_commitment));
+        Ok(())
+    }
+    
+    #[pallet::weight(10_000)]
+    pub fn unshield(
+        origin: OriginFor<T>,
+        recipient: T::AccountId,
+        amount: BalanceOf<T>,
+        nullifier: [u8; 32],
+        proof: Vec<u8>,
+    ) -> DispatchResult {
+        ensure_signed(origin)?;
+        
+        // Ensure nullifier hasn't been spent
+        ensure!(!Nullifiers::<T>::contains_key(nullifier), Error::<T>::NullifierAlreadyUsed);
+        
+        // Verify the proof is valid for the unshield operation
+        ensure!(Self::verify_unshield_proof(&proof, &nullifier, amount), Error::<T>::InvalidProof);
+        
+        // Mark nullifier as spent
+        Nullifiers::<T>::insert(nullifier, true);
+        
+        // Transfer funds from shielded pool to recipient
+        T::Currency::transfer(&Self::account_id(), &recipient, amount, ExistenceRequirement::KeepAlive)?;
+        
+        Self::deposit_event(Event::Unshielded(recipient, amount, nullifier));
+        Ok(())
+    }
+}
+```
+
+4. Implement helper functions for ZK-proof verification:
+```rust
+impl<T: Config> Pallet<T> {
+    // Helper function to verify shield operation proofs
+    fn verify_shield_proof(proof: &[u8], commitment: &[u8; 32], amount: BalanceOf<T>) -> bool {
+        // Use the ZK circuits from Task 3 to verify the proof
+        // This will integrate with the arkworks-rs implementation
+        // ...
+    }
+    
+    // Helper function to verify private transfer proofs
+    fn verify_transfer_proof(proof: &[u8], nullifier: &[u8; 32], new_commitment: &[u8; 32]) -> bool {
+        // Use the ZK circuits from Task 3 to verify the proof
+        // ...
+    }
+    
+    // Helper function to verify unshield operation proofs
+    fn verify_unshield_proof(proof: &[u8], nullifier: &[u8; 32], amount: BalanceOf<T>) -> bool {
+        // Use the ZK circuits from Task 3 to verify the proof
+        // ...
+    }
+    
+    // Helper function to update the Merkle tree
+    fn update_merkle_tree(commitment: [u8; 32]) -> DispatchResult {
+        let mut tree = MerkleTree::<T>::get();
+        tree.push(commitment);
+        // Update tree hash if needed
+        MerkleTree::<T>::put(tree);
+        Ok(())
+    }
+    
+    // Helper function to get the account ID for the shielded pool
+    fn account_id() -> T::AccountId {
+        // Generate a deterministic account ID for the shielded pool
+        // ...
+    }
+}
+```
+
+5. Define events and errors:
+```rust
+#[pallet::event]
+#[pallet::generate_deposit(pub(super) fn deposit_event)]
+pub enum Event<T: Config> {
+    Shielded(T::AccountId, BalanceOf<T>, [u8; 32]),
+    PrivateTransfer([u8; 32], [u8; 32]),
+    Unshielded(T::AccountId, BalanceOf<T>, [u8; 32]),
+}
+
+#[pallet::error]
+pub enum Error<T> {
+    InvalidProof,
+    NullifierAlreadyUsed,
+    InsufficientBalance,
+    MerkleTreeUpdateFailed,
+}
+```
+
+6. Integrate with the ZK circuits from Task 3:
+   - Import the necessary verification functions from the ZK circuit implementation
+   - Ensure the proof verification logic aligns with the circuit constraints
+   - Implement proper error handling for invalid proofs
+
+7. Add the pallet to the runtime:
+```rust
+// In runtime/src/lib.rs
+parameter_types! {
+    pub const MaxCommitments: u32 = 1_000_000;
+}
+
+impl pallet_shielded_pool::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Currency = Balances;
+    // Additional configuration
+}
+
+// Add to construct_runtime macro
+construct_runtime!(
+    pub enum Runtime where
+        Block = Block,
+        NodeBlock = opaque::Block,
+        UncheckedExtrinsic = UncheckedExtrinsic
+    {
+        // ... other pallets
+        ShieldedPool: pallet_shielded_pool,
+    }
+);
+```
+
+8. Implement benchmarking for the pallet to determine appropriate weights for extrinsics.
+
+9. Document the pallet's API and usage patterns for developers.
+
+# Test Strategy:
+To verify the correct implementation of the pallet-shielded-pool, follow these testing steps:
+
+1. Unit Tests:
+   - Create unit tests for each extrinsic (shield, private_transfer, unshield)
+   - Test nullifier handling to ensure spent nullifiers cannot be reused
+   - Test commitment storage and retrieval
+   - Test Merkle tree updates
+   - Test proof verification logic with both valid and invalid proofs
+   ```rust
+   #[test]
+   fn shield_operation_works() {
+       new_test_ext().execute_with(|| {
+           let amount = 100;
+           let commitment = [0u8; 32]; // Mock commitment
+           let proof = vec![0u8; 64];  // Mock valid proof
+           
+           assert_ok!(ShieldedPool::shield(Origin::signed(1), amount, commitment, proof));
+           assert!(Commitments::<Test>::contains_key(commitment));
+           // Verify balance changes
+       });
+   }
+   
+   #[test]
+   fn nullifier_cannot_be_reused() {
+       new_test_ext().execute_with(|| {
+           // Setup: Create a valid private transfer
+           // Then attempt to use the same nullifier again
+           // Verify the second transaction fails
+       });
+   }
+   ```
+
+2. Integration Tests:
+   - Test the full flow of funds: shield → private_transfer → unshield
+   - Verify correct balance changes in public accounts
+   - Test edge cases like zero-value transfers
+   ```rust
+   #[test]
+   fn full_flow_works() {
+       new_test_ext().execute_with(|| {
+           // Shield funds
+           // Perform private transfer
+           // Unshield funds
+           // Verify final balances match expected values
+       });
+   }
+   ```
+
+3. Mock ZK-Proof Testing:
+   - Create mock implementations of the ZK verification functions
+   - Test the pallet's behavior with deterministic proof results
+   - Ensure proper error handling for invalid proofs
+
+4. Runtime Integration Tests:
+   - Test the pallet as part of the full runtime
+   - Verify correct interaction with pallet-balances
+   - Test transaction fees and weight calculations
+
+5. Security Testing:
+   - Attempt to double-spend nullifiers
+   - Try to forge invalid proofs
+   - Test with malformed input data
+   - Verify that the pallet correctly rejects all invalid operations
+
+6. Performance Testing:
+   - Benchmark proof verification time
+   - Measure storage impact of commitments and nullifiers
+   - Test with large numbers of transactions to ensure scalability
+
+7. Manual Testing:
+   - Deploy to a test network
+   - Use the Polkadot.js UI to submit transactions
+   - Verify correct event emissions
+   - Check that state transitions match expectations
+
+8. Documentation Verification:
+   - Ensure all functions are properly documented
+   - Verify that usage examples are correct and up-to-date
